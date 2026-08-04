@@ -32,6 +32,11 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    subtotal_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_discount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_shipping: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_tax: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
 
 
 class OrderLineItem(Base):
