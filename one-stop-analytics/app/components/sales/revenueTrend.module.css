@@ -1,0 +1,79 @@
+.loading, .empty {
+  min-height: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.chartWrap {
+  width: 100%;
+  padding-top: 0.25rem;
+}
+
+.chartHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+}
+
+.legendSwatch {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: var(--p-color-bg-fill-success, #008060);
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  min-height: 15rem;
+  overflow: visible;
+}
+
+.gridLine {
+  stroke: var(--p-color-border-secondary, #e1e3e5);
+  stroke-width: 1;
+}
+
+.area {
+  fill: color-mix(in srgb, var(--p-color-bg-fill-success, #008060) 12%, transparent);
+}
+
+.line {
+  fill: none;
+  stroke: var(--p-color-bg-fill-success, #008060);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.point {
+  fill: var(--p-color-bg-surface, #fff);
+  stroke: var(--p-color-bg-fill-success, #008060);
+  stroke-width: 2;
+}
+
+.axisTick {
+  fill: var(--p-color-text-secondary, #616161);
+  font-size: 12px;
+}
+
+.axisLabel {
+  fill: var(--p-color-text, #202223);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .chartHeader {
+    justify-content: flex-start;
+  }
+
+  .chart {
+    min-height: 12rem;
+  }
+}

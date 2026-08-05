@@ -1,6 +1,8 @@
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -32,6 +34,11 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
     subtotal_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_discount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_shipping: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
