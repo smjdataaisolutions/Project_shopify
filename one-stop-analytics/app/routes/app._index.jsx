@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { BusinessHighlights } from "../components/dashboard/BusinessHighlights";
 import { KPICard } from "../components/dashboard/KPICard";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchDashboard } from "../services/dashboard";
@@ -97,6 +98,10 @@ export default function Dashboard() {
           </div>
         </s-section>
       ) : null}
+
+      <s-section heading="Business highlights">
+        <BusinessHighlights />
+      </s-section>
     </s-page>
   );
 }
