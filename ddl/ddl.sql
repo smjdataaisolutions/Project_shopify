@@ -64,8 +64,19 @@ CREATE TABLE IF NOT EXISTS orders (
   processed_at TIMESTAMPTZ,
   currency_code TEXT,
   financial_status TEXT,
-  fulfillment_status TEXT
+  fulfillment_status TEXT,
+  subtotal_price NUMERIC,
+  total_discount NUMERIC,
+  total_shipping NUMERIC,
+  total_tax NUMERIC,
+  total_price NUMERIC
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_price NUMERIC;
 
 CREATE TABLE IF NOT EXISTS order_line_items (
   id TEXT PRIMARY KEY,
