@@ -53,5 +53,9 @@ class OrderLineItem(Base):
     order_id: Mapped[str | None] = mapped_column(
         ForeignKey("orders.id"), index=True, nullable=True
     )
+    product_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    variant_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
