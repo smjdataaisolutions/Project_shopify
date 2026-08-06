@@ -12,6 +12,15 @@
   flex-wrap: wrap;
 }
 
+.productList {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.productList li + li {
+  margin-top: 0.25rem;
+}
+
 .state {
   min-height: 8rem;
   display: flex;

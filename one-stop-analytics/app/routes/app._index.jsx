@@ -3,6 +3,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ActionNeeded } from "../components/dashboard/ActionNeeded";
 import { BusinessHighlights } from "../components/dashboard/BusinessHighlights";
 import { KPICard } from "../components/dashboard/KPICard";
+import { OverviewFilters } from "../components/dashboard/OverviewFilters";
+import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchDashboard } from "../services/dashboard";
 import { authenticate } from "../shopify.server";
@@ -36,77 +38,114 @@ function getMetrics(dashboard) {
   ];
 }
 
-export default function Dashboard() {
+export default function StorePerformanceOverview() {
+  const [areFiltersCollapsed, setAreFiltersCollapsed] = useState(false);
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    orderStatuses: [],
+    fulfillmentStatuses: [],
+    inventoryStatus: null,
+    locationIds: [],
+  });
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [requestVersion, setRequestVersion] = useState(0);
 
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      setDashboard(await fetchDashboard());
-    } catch (requestError) {
-      setError(requestError.message || "Unable to load the dashboard.");
-    } finally {
-      setIsLoading(false);
-    }
+  const loadDashboard = useCallback(() => {
+    setRequestVersion((version) => version + 1);
   }, []);
 
   useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+    setDashboard(null);
+
+    fetchDashboard(filters)
+      .then((response) => {
+        if (active) setDashboard(response);
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(
+            requestError.message || "Unable to load store performance overview.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [filters, requestVersion]);
 
   return (
-    <s-page heading="Dashboard">
-      <s-section>
-        <s-stack direction="inline" gap="base" alignItems="center">
-          <s-text tone="subdued">A summary of your store performance.</s-text>
-          <s-button
-            onClick={loadDashboard}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Refresh
-          </s-button>
-        </s-stack>
-      </s-section>
+    <s-page heading="Store performance overview" inlineSize="large">
+      <AnalyticsTopNavigation />
 
-      {isLoading && !dashboard ? (
-        <s-section heading="Loading dashboard">
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <s-spinner accessibilityLabel="Loading dashboard data" />
-            <s-text>Retrieving your latest store metrics.</s-text>
-          </s-stack>
-        </s-section>
-      ) : null}
+      <div
+        className={`${styles.overviewLayout} ${
+          areFiltersCollapsed ? styles.overviewLayoutCollapsed : ""
+        }`}
+      >
+        <OverviewFilters
+          filters={filters}
+          onChange={setFilters}
+          isCollapsed={areFiltersCollapsed}
+          onCollapse={() => setAreFiltersCollapsed(true)}
+        />
 
-      {error ? (
-        <s-section heading="Unable to load dashboard">
-          <s-stack direction="block" gap="base">
-            <s-text>{error}</s-text>
-            <s-button onClick={loadDashboard}>Try again</s-button>
-          </s-stack>
-        </s-section>
-      ) : null}
+        {areFiltersCollapsed ? (
+          <aside className={styles.collapsedFilters} aria-label="Collapsed filters">
+            <s-button
+              icon="chevron-right"
+              variant="tertiary"
+              accessibilityLabel="Expand filters"
+              onClick={() => setAreFiltersCollapsed(false)}
+            />
+          </aside>
+        ) : null}
 
-      {dashboard ? (
-        <s-section heading="Store overview">
-          <div className={styles.grid}>
-            {getMetrics(dashboard).map((metric) => (
-              <KPICard key={metric.label} {...metric} />
-            ))}
-          </div>
-        </s-section>
-      ) : null}
+        <div className={styles.overviewContent}>
+          {isLoading && !dashboard ? (
+            <s-section heading="Loading store performance overview">
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-spinner accessibilityLabel="Loading store performance data" />
+                <s-text>Retrieving your latest store metrics.</s-text>
+              </s-stack>
+            </s-section>
+          ) : null}
 
-      <s-section heading="Business highlights">
-        <BusinessHighlights />
-      </s-section>
+          {error ? (
+            <s-section heading="Unable to load store performance overview">
+              <s-stack direction="block" gap="base">
+                <s-text>{error}</s-text>
+                <s-button onClick={loadDashboard}>Try again</s-button>
+              </s-stack>
+            </s-section>
+          ) : null}
 
-      <s-section heading="Action needed">
-        <ActionNeeded />
-      </s-section>
+          {dashboard ? (
+            <s-section heading="Store overview">
+              <div className={styles.grid}>
+                {getMetrics(dashboard).map((metric) => (
+                  <KPICard key={metric.label} {...metric} />
+                ))}
+              </div>
+            </s-section>
+          ) : null}
+
+          <s-section heading="Business highlights">
+            <BusinessHighlights filters={filters} />
+          </s-section>
+
+          <s-section heading="Action needed">
+            <ActionNeeded filters={filters} />
+          </s-section>
+        </div>
+      </div>
     </s-page>
   );
 }

@@ -1,13 +1,19 @@
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Literal
 
-from app.repositories.dashboard_repository import DashboardRepository
+from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
+    AffectedProduct,
     ActionNeededItem,
     ActionNeededResponse,
     BusinessHighlight,
     BusinessHighlightsResponse,
+    DashboardSummary,
     InventoryHealthHighlight,
     InventoryHighlightMetrics,
+    LocationFilterOption,
+    OverviewFilterOptionsResponse,
     SalesHighlightMetrics,
     SalesPerformanceHighlight,
     TopProductHighlightMetrics,
@@ -15,21 +21,80 @@ from app.schemas.dashboard import (
 )
 
 
-LOW_STOCK_THRESHOLD = 10
 MAX_ACTIONS = 5
 ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
+
+
+def build_overview_filters(
+    start_date: date | None,
+    end_date: date | None,
+    financial_statuses: list[str] | None,
+    fulfillment_statuses: list[str] | None,
+    inventory_status: Literal["in_stock", "low_stock", "out_of_stock"] | None,
+    location_ids: list[str] | None,
+) -> OverviewFilters:
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start_date must be on or before end_date")
+    return OverviewFilters(
+        start_date=start_date,
+        end_date=end_date,
+        financial_statuses=tuple(dict.fromkeys(financial_statuses or [])),
+        fulfillment_statuses=tuple(dict.fromkeys(fulfillment_statuses or [])),
+        inventory_status=inventory_status,
+        location_ids=tuple(dict.fromkeys(location_ids or [])),
+    )
 
 
 class DashboardService:
     """Business rules for deterministic Store Overview highlights."""
 
-    def __init__(self, repository: DashboardRepository) -> None:
+    def __init__(
+        self,
+        repository: DashboardRepository,
+        low_stock_threshold: int,
+    ) -> None:
         self.repository = repository
+        self.low_stock_threshold = low_stock_threshold
 
-    def get_business_highlights(self) -> BusinessHighlightsResponse:
-        sales = self.repository.get_sales_metrics()
-        inventory = self.repository.get_inventory_health(LOW_STOCK_THRESHOLD)
-        top_product = self.repository.get_top_selling_product()
+    def get_summary(self, filters: OverviewFilters) -> DashboardSummary:
+        metrics = self.repository.get_dashboard_summary(
+            filters, self.low_stock_threshold
+        )
+        average_order_value = (
+            metrics.total_revenue / metrics.total_orders
+            if metrics.total_orders
+            else Decimal("0")
+        )
+        return DashboardSummary(
+            total_products=metrics.total_products,
+            total_variants=metrics.total_variants,
+            low_stock_products=metrics.low_stock_products,
+            out_of_stock_products=metrics.out_of_stock_products,
+            total_orders=metrics.total_orders,
+            total_revenue=float(metrics.total_revenue),
+            units_sold=metrics.units_sold,
+            average_order_value=float(average_order_value),
+        )
+
+    def get_filter_options(self) -> OverviewFilterOptionsResponse:
+        options = self.repository.get_filter_options()
+        return OverviewFilterOptionsResponse(
+            order_statuses=list(options.financial_statuses),
+            fulfillment_statuses=list(options.fulfillment_statuses),
+            locations=[
+                LocationFilterOption(id=location.id, name=location.name)
+                for location in options.locations
+            ],
+        )
+
+    def get_business_highlights(
+        self, filters: OverviewFilters
+    ) -> BusinessHighlightsResponse:
+        sales = self.repository.get_sales_metrics(filters)
+        inventory = self.repository.get_inventory_health(
+            self.low_stock_threshold, filters
+        )
+        top_product = self.repository.get_top_selling_product(filters)
 
         highlights: list[BusinessHighlight] = []
         if sales.total_orders > 0 and sales.total_revenue is not None:
@@ -127,13 +192,44 @@ class ActionNeededService:
         self,
         repository: DashboardRepository,
         low_aov_threshold: Decimal,
+        low_stock_threshold: int = 10,
     ) -> None:
         self.repository = repository
         self.low_aov_threshold = low_aov_threshold
+        self.low_stock_threshold = low_stock_threshold
 
-    def get_actions(self) -> ActionNeededResponse:
-        sales = self.repository.get_sales_metrics()
-        inventory = self.repository.get_inventory_health(LOW_STOCK_THRESHOLD)
+    def get_actions(
+        self, filters: OverviewFilters = OverviewFilters()
+    ) -> ActionNeededResponse:
+        sales = self.repository.get_sales_metrics(filters)
+        inventory = self.repository.get_inventory_health(
+            self.low_stock_threshold, filters
+        )
+        affected_inventory = []
+        if inventory.out_of_stock_count > 0 or inventory.low_stock_count > 0:
+            affected_inventory = self.repository.get_affected_inventory_products(
+                self.low_stock_threshold,
+                filters,
+            )
+
+        out_of_stock_products = [
+            AffectedProduct(
+                product_id=product.product_id,
+                product_title=product.product_title or "Untitled product",
+                inventory_quantity=0,
+            )
+            for product in affected_inventory
+            if product.is_out_of_stock
+        ]
+        low_stock_products = [
+            AffectedProduct(
+                product_id=product.product_id,
+                product_title=product.product_title or "Untitled product",
+                inventory_quantity=product.low_stock_quantity,
+            )
+            for product in affected_inventory
+            if product.low_stock_quantity is not None
+        ]
 
         actions: list[ActionNeededItem] = []
         if inventory.out_of_stock_count > 0:
@@ -148,6 +244,7 @@ class ActionNeededService:
                         f"{_format_count(count, 'product')} "
                         f"{_count_verb(count)} currently unavailable."
                     ),
+                    affected_products=out_of_stock_products,
                     recommended_action="Restock inventory immediately.",
                 )
             )
@@ -163,20 +260,30 @@ class ActionNeededService:
                     message=(
                         f"{_format_count(count, 'product')} "
                         f"{_count_verb(count)} between 1 and "
-                        f"{LOW_STOCK_THRESHOLD} units remaining."
+                        f"{self.low_stock_threshold} units remaining."
                     ),
+                    affected_products=low_stock_products,
                     recommended_action="Plan inventory replenishment.",
                 )
             )
 
         if sales.total_orders == 0:
+            filtered_orders = filters.has_order_filters
             actions.append(
                 ActionNeededItem(
                     id="sales_no_orders",
                     priority="warning",
                     category="sales",
-                    title="No orders yet",
-                    message="No orders have been recorded for this store.",
+                    title=(
+                        "No orders match the selected filters"
+                        if filtered_orders
+                        else "No orders yet"
+                    ),
+                    message=(
+                        "No orders were found for the selected date and statuses."
+                        if filtered_orders
+                        else "No orders have been recorded for this store."
+                    ),
                     recommended_action=(
                         "Review store traffic and marketing activities."
                     ),

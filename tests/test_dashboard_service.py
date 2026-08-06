@@ -3,6 +3,7 @@ import unittest
 
 from app.repositories.dashboard_repository import (
     InventoryHealthMetrics,
+    OverviewFilters,
     OverviewSalesMetrics,
     TopProductMetrics,
 )
@@ -16,14 +17,17 @@ class StubDashboardRepository:
         self.top_product = top_product
         self.inventory_threshold = None
 
-    def get_sales_metrics(self):
+    def get_sales_metrics(self, filters):
+        self.filters = filters
         return self.sales
 
-    def get_inventory_health(self, threshold):
+    def get_inventory_health(self, threshold, filters):
         self.inventory_threshold = threshold
+        self.filters = filters
         return self.inventory
 
-    def get_top_selling_product(self):
+    def get_top_selling_product(self, filters):
+        self.filters = filters
         return self.top_product
 
 
@@ -63,7 +67,9 @@ class DashboardServiceTests(unittest.TestCase):
             ),
         )
 
-        response = DashboardService(repository).get_business_highlights()
+        response = DashboardService(repository, 10).get_business_highlights(
+            OverviewFilters()
+        )
 
         self.assertEqual(repository.inventory_threshold, 10)
         self.assertEqual(
@@ -94,7 +100,9 @@ class DashboardServiceTests(unittest.TestCase):
         self.assertEqual(top_product.metrics.product_id, "gid://shopify/Product/1")
 
     def test_omits_highlights_when_source_data_is_unavailable(self):
-        response = DashboardService(make_repository()).get_business_highlights()
+        response = DashboardService(make_repository(), 10).get_business_highlights(
+            OverviewFilters()
+        )
 
         self.assertIsNone(response.currency_code)
         self.assertEqual(response.highlights, [])
@@ -108,8 +116,8 @@ class DashboardServiceTests(unittest.TestCase):
         for inventory_metrics, expected_severity in cases:
             with self.subTest(expected_severity=expected_severity):
                 response = DashboardService(
-                    make_repository(inventory=inventory_metrics)
-                ).get_business_highlights()
+                    make_repository(inventory=inventory_metrics), 10
+                ).get_business_highlights(OverviewFilters())
 
                 self.assertEqual(len(response.highlights), 1)
                 self.assertEqual(response.highlights[0].severity, expected_severity)
@@ -125,8 +133,9 @@ class DashboardServiceTests(unittest.TestCase):
                     product_revenue=Decimal("10"),
                     currency_code=None,
                 ),
-            )
-        ).get_business_highlights()
+            ),
+            10,
+        ).get_business_highlights(OverviewFilters())
 
         self.assertEqual(
             response.highlights[0].message,

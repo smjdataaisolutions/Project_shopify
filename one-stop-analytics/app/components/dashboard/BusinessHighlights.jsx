@@ -35,7 +35,7 @@ function HighlightCard({ highlight }) {
   );
 }
 
-export function BusinessHighlights() {
+export function BusinessHighlights({ filters }) {
   const [highlights, setHighlights] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -45,7 +45,7 @@ export function BusinessHighlights() {
     setHighlights(null);
     setError(null);
 
-    fetchBusinessHighlights()
+    fetchBusinessHighlights(filters)
       .then((response) => active && setHighlights(response.highlights))
       .catch((requestError) => {
         if (active) {
@@ -54,7 +54,7 @@ export function BusinessHighlights() {
       });
 
     return () => { active = false; };
-  }, [requestVersion]);
+  }, [filters, requestVersion]);
 
   if (error) {
     return (
