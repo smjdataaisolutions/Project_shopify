@@ -14,6 +14,17 @@ class DashboardSummary(BaseModel):
     average_order_value: float = Field(ge=0)
 
 
+class LocationFilterOption(BaseModel):
+    id: str
+    name: str
+
+
+class OverviewFilterOptionsResponse(BaseModel):
+    order_statuses: list[str]
+    fulfillment_statuses: list[str]
+    locations: list[LocationFilterOption]
+
+
 class SalesHighlightMetrics(BaseModel):
     total_revenue: float = Field(ge=0)
     total_orders: int = Field(ge=0)
@@ -75,6 +86,12 @@ class BusinessHighlightsResponse(BaseModel):
     highlights: list[BusinessHighlight]
 
 
+class AffectedProduct(BaseModel):
+    product_id: str
+    product_title: str
+    inventory_quantity: int = Field(ge=0)
+
+
 class ActionNeededItem(BaseModel):
     id: Literal[
         "inventory_out_of_stock",
@@ -86,6 +103,7 @@ class ActionNeededItem(BaseModel):
     category: Literal["inventory", "sales"]
     title: str
     message: str
+    affected_products: list[AffectedProduct] = Field(default_factory=list)
     recommended_action: str
 
 

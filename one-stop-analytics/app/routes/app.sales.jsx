@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { KPICard } from "../components/dashboard/KPICard";
+import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import { RevenueTrend } from "../components/sales/RevenueTrend";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchSalesSummary } from "../services/sales";
@@ -56,17 +57,7 @@ export default function Sales() {
 
   return (
     <s-page heading="Sales">
-      <s-section>
-        <s-stack direction="inline" gap="base" alignItems="center">
-          <s-text tone="subdued">A summary of your store sales.</s-text>
-          <s-button
-            onClick={loadSummary}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Refresh
-          </s-button>
-        </s-stack>
-      </s-section>
+      <AnalyticsTopNavigation />
 
       {isLoading && !summary ? (
         <s-section heading="Loading sales">

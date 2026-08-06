@@ -1,65 +1,93 @@
+from datetime import date
 import logging
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import Order, OrderLineItem, Product, ProductVariant
 from app.db.session import get_db
-from app.repositories.dashboard_repository import DashboardRepository
+from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
     ActionNeededResponse,
     BusinessHighlightsResponse,
     DashboardSummary,
+    OverviewFilterOptionsResponse,
 )
-from app.services.dashboard_service import ActionNeededService, DashboardService
+from app.services.dashboard_service import (
+    ActionNeededService,
+    DashboardService,
+    build_overview_filters,
+)
 
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/dashboard", response_model=DashboardSummary)
-def get_dashboard(db: Session = Depends(get_db)) -> DashboardSummary:
-    """Return product and inventory summary values for the Shopify dashboard."""
-    threshold = get_settings().low_stock_threshold
-
-    total_products = db.scalar(select(func.count()).select_from(Product)) or 0
-    total_variants = db.scalar(select(func.count()).select_from(ProductVariant)) or 0
-
-    # Each metric is a count of products, even if a product has several matching variants.
-    low_stock_products = db.scalar(
-        select(func.count(func.distinct(ProductVariant.product_id))).where(
-            ProductVariant.inventory_quantity < threshold,
+def get_overview_filters(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    financial_status: Annotated[list[str] | None, Query()] = None,
+    fulfillment_status: Annotated[list[str] | None, Query()] = None,
+    inventory_status: Literal[
+        "in_stock", "low_stock", "out_of_stock"
+    ] | None = Query(default=None),
+    location_id: Annotated[list[str] | None, Query()] = None,
+) -> OverviewFilters:
+    try:
+        return build_overview_filters(
+            start_date,
+            end_date,
+            financial_status,
+            fulfillment_status,
+            inventory_status,
+            location_id,
         )
-    ) or 0
-    out_of_stock_products = db.scalar(
-        select(func.count(func.distinct(ProductVariant.product_id))).where(
-            ProductVariant.inventory_quantity == 0,
-        )
-    ) or 0
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
-    total_orders = db.scalar(select(func.count()).select_from(Order)) or 0
-    total_revenue = db.scalar(
-        select(func.coalesce(func.sum(OrderLineItem.unit_price * OrderLineItem.quantity), 0))
-    ) or 0
-    units_sold = db.scalar(
-        select(func.coalesce(func.sum(OrderLineItem.quantity), 0))
-    ) or 0
-    average_order_value = total_revenue / total_orders if total_orders else 0
 
-    return DashboardSummary(
-        total_products=total_products,
-        total_variants=total_variants,
-        low_stock_products=low_stock_products,
-        out_of_stock_products=out_of_stock_products,
-        total_orders=total_orders,
-        total_revenue=float(total_revenue),
-        units_sold=units_sold,
-        average_order_value=float(average_order_value),
+def _dashboard_service(db: Session) -> DashboardService:
+    return DashboardService(
+        DashboardRepository(db),
+        low_stock_threshold=get_settings().low_stock_threshold,
     )
+
+
+@router.get("/dashboard", response_model=DashboardSummary)
+def get_dashboard(
+    filters: OverviewFilters = Depends(get_overview_filters),
+    db: Session = Depends(get_db),
+) -> DashboardSummary:
+    """Return Store Overview KPI values for the selected filters."""
+    try:
+        return _dashboard_service(db).get_summary(filters)
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve the store overview")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve store performance overview.",
+        ) from error
+
+
+@router.get(
+    "/analytics/overview/filter-options",
+    response_model=OverviewFilterOptionsResponse,
+)
+def get_overview_filter_options(
+    db: Session = Depends(get_db),
+) -> OverviewFilterOptionsResponse:
+    """Return exact filter values available in synchronized PostgreSQL data."""
+    try:
+        return _dashboard_service(db).get_filter_options()
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve overview filter options")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve overview filter options.",
+        ) from error
 
 
 @router.get(
@@ -67,11 +95,12 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardSummary:
     response_model=BusinessHighlightsResponse,
 )
 def get_business_highlights(
+    filters: OverviewFilters = Depends(get_overview_filters),
     db: Session = Depends(get_db),
 ) -> BusinessHighlightsResponse:
-    """Return rule-based sales, inventory, and product highlights."""
+    """Return rule-based highlights for the selected filters."""
     try:
-        return DashboardService(DashboardRepository(db)).get_business_highlights()
+        return _dashboard_service(db).get_business_highlights(filters)
     except SQLAlchemyError as error:
         logger.exception("Unable to retrieve overview business highlights")
         raise HTTPException(
@@ -84,15 +113,19 @@ def get_business_highlights(
     "/analytics/overview/action-needed",
     response_model=ActionNeededResponse,
 )
-def get_action_needed(db: Session = Depends(get_db)) -> ActionNeededResponse:
-    """Return prioritized actions derived from store overview metrics."""
+def get_action_needed(
+    filters: OverviewFilters = Depends(get_overview_filters),
+    db: Session = Depends(get_db),
+) -> ActionNeededResponse:
+    """Return prioritized actions for the selected filters."""
     try:
         settings = get_settings()
         service = ActionNeededService(
             DashboardRepository(db),
             low_aov_threshold=settings.low_aov_threshold,
+            low_stock_threshold=settings.low_stock_threshold,
         )
-        return service.get_actions()
+        return service.get_actions(filters)
     except SQLAlchemyError as error:
         logger.exception("Unable to retrieve overview actions")
         raise HTTPException(

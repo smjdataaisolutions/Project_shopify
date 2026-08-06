@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.routers.dashboard import get_action_needed, router
+from app.repositories.dashboard_repository import OverviewFilters
 from app.schemas.dashboard import ActionNeededResponse
 
 
@@ -19,12 +20,19 @@ class ActionNeededApiTests(unittest.TestCase):
                     "category": "inventory",
                     "title": "Products are out of stock",
                     "message": "2 products are currently unavailable.",
+                    "affected_products": [
+                        {
+                            "product_id": "product-1",
+                            "product_title": "Example product",
+                            "inventory_quantity": 0,
+                        }
+                    ],
                     "recommended_action": "Restock inventory immediately.",
                 }
             ]
         )
 
-        response = get_action_needed(db=object())
+        response = get_action_needed(filters=OverviewFilters(), db=object())
 
         self.assertEqual(
             response.model_dump(mode="json"),
@@ -36,6 +44,13 @@ class ActionNeededApiTests(unittest.TestCase):
                         "category": "inventory",
                         "title": "Products are out of stock",
                         "message": "2 products are currently unavailable.",
+                        "affected_products": [
+                            {
+                                "product_id": "product-1",
+                                "product_title": "Example product",
+                                "inventory_quantity": 0,
+                            }
+                        ],
                         "recommended_action": "Restock inventory immediately.",
                     }
                 ]
@@ -57,7 +72,7 @@ class ActionNeededApiTests(unittest.TestCase):
         get_sales_metrics.side_effect = SQLAlchemyError("database credentials")
 
         with self.assertRaises(HTTPException) as context:
-            get_action_needed(db=object())
+            get_action_needed(filters=OverviewFilters(), db=object())
 
         self.assertEqual(context.exception.status_code, 500)
         self.assertEqual(

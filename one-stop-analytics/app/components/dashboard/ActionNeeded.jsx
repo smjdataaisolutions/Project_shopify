@@ -8,10 +8,17 @@ const PRIORITY_PRESENTATION = {
   warning: { label: "Warning", tone: "caution" },
   recommendation: { label: "Recommendation", tone: "info" },
 };
+const PRODUCT_PREVIEW_LIMIT = 3;
 
 function ActionCard({ action }) {
+  const [showAllProducts, setShowAllProducts] = useState(false);
   const presentation = PRIORITY_PRESENTATION[action.priority]
     || PRIORITY_PRESENTATION.recommendation;
+  const affectedProducts = action.affected_products || [];
+  const visibleProducts = showAllProducts
+    ? affectedProducts
+    : affectedProducts.slice(0, PRODUCT_PREVIEW_LIMIT);
+  const hasMoreProducts = affectedProducts.length > PRODUCT_PREVIEW_LIMIT;
 
   return (
     <s-box
@@ -26,16 +33,40 @@ function ActionCard({ action }) {
           <s-badge tone={presentation.tone}>{presentation.label}</s-badge>
         </div>
         <s-text>{action.message}</s-text>
+        {affectedProducts.length ? (
+          <s-stack direction="block" gap="small">
+            <s-text>
+              <strong>Affected products</strong>
+            </s-text>
+            <ul className={styles.productList}>
+              {visibleProducts.map((product) => (
+                <li key={product.product_id}>
+                  {product.product_title} — {product.inventory_quantity}{" "}
+                  {product.inventory_quantity === 1 ? "unit" : "units"}
+                </li>
+              ))}
+            </ul>
+            {hasMoreProducts ? (
+              <s-button
+                onClick={() => setShowAllProducts((isVisible) => !isVisible)}
+              >
+                {showAllProducts ? "Show fewer products" : "View products"}
+              </s-button>
+            ) : null}
+          </s-stack>
+        ) : null}
         <s-stack direction="block" gap="small">
-          <s-text type="strong">Recommended action</s-text>
-          <s-text type="strong">{action.recommended_action}</s-text>
+          <s-text>
+            <strong>Recommended action</strong>
+          </s-text>
+          <s-text>{action.recommended_action}</s-text>
         </s-stack>
       </s-stack>
     </s-box>
   );
 }
 
-export function ActionNeeded() {
+export function ActionNeeded({ filters }) {
   const [actions, setActions] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -45,7 +76,7 @@ export function ActionNeeded() {
     setActions(null);
     setError(null);
 
-    fetchActionNeeded()
+    fetchActionNeeded(filters)
       .then((response) => active && setActions(response.actions))
       .catch((requestError) => {
         if (active) {
@@ -54,7 +85,7 @@ export function ActionNeeded() {
       });
 
     return () => { active = false; };
-  }, [requestVersion]);
+  }, [filters, requestVersion]);
 
   if (error) {
     return (

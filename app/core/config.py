@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     database_url: str
     app_name: str = "Shopify Analytics API"
-    low_stock_threshold: int = 5
+    low_stock_threshold: int = 10
     low_aov_threshold: Decimal = Field(default=Decimal("50.00"), ge=0)
 
     model_config = SettingsConfigDict(

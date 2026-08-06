@@ -3,3 +3,35 @@
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 1rem;
 }
+
+.overviewLayout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.overviewLayoutCollapsed {
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+}
+
+.collapsedFilters {
+  display: flex;
+  justify-content: center;
+  padding-block-start: 0.5rem;
+}
+
+.overviewContent {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .overviewLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .collapsedFilters {
+    justify-content: flex-start;
+    padding-block-start: 0;
+  }
+}

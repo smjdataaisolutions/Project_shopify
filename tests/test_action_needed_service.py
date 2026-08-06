@@ -2,6 +2,7 @@ from decimal import Decimal
 import unittest
 
 from app.repositories.dashboard_repository import (
+    InventoryAffectedProduct,
     InventoryHealthMetrics,
     OverviewSalesMetrics,
 )
@@ -9,17 +10,25 @@ from app.services.dashboard_service import ActionNeededService
 
 
 class StubDashboardRepository:
-    def __init__(self, sales, inventory):
+    def __init__(self, sales, inventory, affected_products):
         self.sales = sales
         self.inventory = inventory
+        self.affected_products = affected_products
         self.inventory_threshold = None
 
-    def get_sales_metrics(self):
+    def get_sales_metrics(self, filters):
+        self.filters = filters
         return self.sales
 
-    def get_inventory_health(self, low_stock_threshold):
+    def get_inventory_health(self, low_stock_threshold, filters):
         self.inventory_threshold = low_stock_threshold
+        self.filters = filters
         return self.inventory
+
+    def get_affected_inventory_products(self, low_stock_threshold, filters):
+        self.inventory_threshold = low_stock_threshold
+        self.filters = filters
+        return self.affected_products
 
 
 def build_service(
@@ -29,6 +38,7 @@ def build_service(
     low_stock_count=0,
     out_of_stock_count=0,
     products_with_inventory=1,
+    affected_products=(),
 ):
     repository = StubDashboardRepository(
         OverviewSalesMetrics(total_revenue, total_orders, "USD"),
@@ -37,6 +47,7 @@ def build_service(
             low_stock_count,
             out_of_stock_count,
         ),
+        list(affected_products),
     )
     return ActionNeededService(repository, Decimal("50.00")), repository
 
@@ -48,6 +59,11 @@ class ActionNeededServiceTests(unittest.TestCase):
             total_orders=2,
             low_stock_count=5,
             out_of_stock_count=2,
+            affected_products=[
+                InventoryAffectedProduct("product-1", "First", True, 4),
+                InventoryAffectedProduct("product-2", None, True, None),
+                InventoryAffectedProduct("product-3", "Third", False, 7),
+            ],
         )
 
         response = service.get_actions()
@@ -65,6 +81,32 @@ class ActionNeededServiceTests(unittest.TestCase):
             [action.priority for action in response.actions],
             ["critical", "warning", "recommendation"],
         )
+        self.assertEqual(
+            [
+                product.model_dump()
+                for product in response.actions[0].affected_products
+            ],
+            [
+                {
+                    "product_id": "product-1",
+                    "product_title": "First",
+                    "inventory_quantity": 0,
+                },
+                {
+                    "product_id": "product-2",
+                    "product_title": "Untitled product",
+                    "inventory_quantity": 0,
+                },
+            ],
+        )
+        self.assertEqual(
+            [
+                product.product_id
+                for product in response.actions[1].affected_products
+            ],
+            ["product-1", "product-3"],
+        )
+        self.assertEqual(response.actions[2].affected_products, [])
 
     def test_no_orders_is_a_warning_and_does_not_emit_low_aov(self):
         service, _repository = build_service(
@@ -78,6 +120,7 @@ class ActionNeededServiceTests(unittest.TestCase):
         self.assertEqual(len(response.actions), 1)
         self.assertEqual(response.actions[0].id, "sales_no_orders")
         self.assertEqual(response.actions[0].priority, "warning")
+        self.assertEqual(response.actions[0].affected_products, [])
 
     def test_ignores_missing_revenue_for_existing_orders(self):
         service, _repository = build_service(
