@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { ActionNeeded } from "../components/dashboard/ActionNeeded";
 import { BusinessHighlights } from "../components/dashboard/BusinessHighlights";
 import { KPICard } from "../components/dashboard/KPICard";
 import styles from "../components/dashboard/dashboard.module.css";
@@ -101,6 +102,10 @@ export default function Dashboard() {
 
       <s-section heading="Business highlights">
         <BusinessHighlights />
+      </s-section>
+
+      <s-section heading="Action needed">
+        <ActionNeeded />
       </s-section>
     </s-page>
   );

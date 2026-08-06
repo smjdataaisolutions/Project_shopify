@@ -1,5 +1,7 @@
+from decimal import Decimal
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +11,7 @@ class Settings(BaseSettings):
     database_url: str
     app_name: str = "Shopify Analytics API"
     low_stock_threshold: int = 5
+    low_aov_threshold: Decimal = Field(default=Decimal("50.00"), ge=0)
 
     model_config = SettingsConfigDict(
         env_file=".env",

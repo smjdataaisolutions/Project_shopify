@@ -73,3 +73,21 @@ BusinessHighlight = (
 class BusinessHighlightsResponse(BaseModel):
     currency_code: str | None
     highlights: list[BusinessHighlight]
+
+
+class ActionNeededItem(BaseModel):
+    id: Literal[
+        "inventory_out_of_stock",
+        "inventory_low_stock",
+        "sales_no_orders",
+        "sales_low_average_order_value",
+    ]
+    priority: Literal["critical", "warning", "recommendation"]
+    category: Literal["inventory", "sales"]
+    title: str
+    message: str
+    recommended_action: str
+
+
+class ActionNeededResponse(BaseModel):
+    actions: list[ActionNeededItem]
