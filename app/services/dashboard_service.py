@@ -2,6 +2,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from app.repositories.dashboard_repository import DashboardRepository
 from app.schemas.dashboard import (
+    ActionNeededItem,
+    ActionNeededResponse,
     BusinessHighlight,
     BusinessHighlightsResponse,
     InventoryHealthHighlight,
@@ -14,6 +16,8 @@ from app.schemas.dashboard import (
 
 
 LOW_STOCK_THRESHOLD = 10
+MAX_ACTIONS = 5
+ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
 
 
 class DashboardService:
@@ -114,6 +118,93 @@ class DashboardService:
             currency_code=currency_code,
             highlights=highlights,
         )
+
+
+class ActionNeededService:
+    """Generate prioritized merchant actions from overview aggregates."""
+
+    def __init__(
+        self,
+        repository: DashboardRepository,
+        low_aov_threshold: Decimal,
+    ) -> None:
+        self.repository = repository
+        self.low_aov_threshold = low_aov_threshold
+
+    def get_actions(self) -> ActionNeededResponse:
+        sales = self.repository.get_sales_metrics()
+        inventory = self.repository.get_inventory_health(LOW_STOCK_THRESHOLD)
+
+        actions: list[ActionNeededItem] = []
+        if inventory.out_of_stock_count > 0:
+            count = inventory.out_of_stock_count
+            actions.append(
+                ActionNeededItem(
+                    id="inventory_out_of_stock",
+                    priority="critical",
+                    category="inventory",
+                    title="Products are out of stock",
+                    message=(
+                        f"{_format_count(count, 'product')} "
+                        f"{_count_verb(count)} currently unavailable."
+                    ),
+                    recommended_action="Restock inventory immediately.",
+                )
+            )
+
+        if inventory.low_stock_count > 0:
+            count = inventory.low_stock_count
+            actions.append(
+                ActionNeededItem(
+                    id="inventory_low_stock",
+                    priority="warning",
+                    category="inventory",
+                    title="Inventory is running low",
+                    message=(
+                        f"{_format_count(count, 'product')} "
+                        f"{_count_verb(count)} between 1 and "
+                        f"{LOW_STOCK_THRESHOLD} units remaining."
+                    ),
+                    recommended_action="Plan inventory replenishment.",
+                )
+            )
+
+        if sales.total_orders == 0:
+            actions.append(
+                ActionNeededItem(
+                    id="sales_no_orders",
+                    priority="warning",
+                    category="sales",
+                    title="No orders yet",
+                    message="No orders have been recorded for this store.",
+                    recommended_action=(
+                        "Review store traffic and marketing activities."
+                    ),
+                )
+            )
+        elif sales.total_revenue is not None:
+            average_order_value = sales.total_revenue / sales.total_orders
+            if average_order_value < self.low_aov_threshold:
+                actions.append(
+                    ActionNeededItem(
+                        id="sales_low_average_order_value",
+                        priority="recommendation",
+                        category="sales",
+                        title="Average order value is low",
+                        message=(
+                            "Average order value is "
+                            f"{_format_money(average_order_value, sales.currency_code)}, "
+                            "below the configured threshold of "
+                            f"{_format_money(self.low_aov_threshold, sales.currency_code)}."
+                        ),
+                        recommended_action=(
+                            "Increase average order value using bundles or upsell offers."
+                        ),
+                    )
+                )
+
+        actions.sort(key=lambda action: ACTION_PRIORITY_ORDER[action.priority])
+        return ActionNeededResponse(actions=actions[:MAX_ACTIONS])
 
 
 def _format_money(amount: Decimal, currency_code: str | None) -> str:

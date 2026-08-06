@@ -9,8 +9,12 @@ from app.core.config import get_settings
 from app.db.models import Order, OrderLineItem, Product, ProductVariant
 from app.db.session import get_db
 from app.repositories.dashboard_repository import DashboardRepository
-from app.schemas.dashboard import BusinessHighlightsResponse, DashboardSummary
-from app.services.dashboard_service import DashboardService
+from app.schemas.dashboard import (
+    ActionNeededResponse,
+    BusinessHighlightsResponse,
+    DashboardSummary,
+)
+from app.services.dashboard_service import ActionNeededService, DashboardService
 
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -73,4 +77,25 @@ def get_business_highlights(
         raise HTTPException(
             status_code=500,
             detail="Unable to retrieve business highlights.",
+        ) from error
+
+
+@router.get(
+    "/analytics/overview/action-needed",
+    response_model=ActionNeededResponse,
+)
+def get_action_needed(db: Session = Depends(get_db)) -> ActionNeededResponse:
+    """Return prioritized actions derived from store overview metrics."""
+    try:
+        settings = get_settings()
+        service = ActionNeededService(
+            DashboardRepository(db),
+            low_aov_threshold=settings.low_aov_threshold,
+        )
+        return service.get_actions()
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve overview actions")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve action needed recommendations.",
         ) from error
