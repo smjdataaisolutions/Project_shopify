@@ -45,8 +45,6 @@ export default function StorePerformanceOverview() {
     endDate: "",
     orderStatuses: [],
     fulfillmentStatuses: [],
-    inventoryStatus: null,
-    locationIds: [],
   });
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState(null);

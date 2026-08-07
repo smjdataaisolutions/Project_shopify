@@ -20,14 +20,12 @@ class StubDashboardRepository:
         self.filters = filters
         return self.sales
 
-    def get_inventory_health(self, low_stock_threshold, filters):
+    def get_inventory_health(self, low_stock_threshold):
         self.inventory_threshold = low_stock_threshold
-        self.filters = filters
         return self.inventory
 
-    def get_affected_inventory_products(self, low_stock_threshold, filters):
+    def get_affected_inventory_products(self, low_stock_threshold):
         self.inventory_threshold = low_stock_threshold
-        self.filters = filters
         return self.affected_products
 
 

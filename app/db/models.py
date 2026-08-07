@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -26,7 +26,6 @@ class ProductVariant(Base):
         ForeignKey("products.id"), index=True, nullable=True
     )
     inventory_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    inventory_item_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     inventory_tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     product: Mapped[Product | None] = relationship(back_populates="variants")
 
@@ -62,29 +61,3 @@ class OrderLineItem(Base):
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
-
-
-class Location(Base):
-    __tablename__ = "locations"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str | None] = mapped_column(String, nullable=True)
-    is_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    fulfills_online_orders: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    has_active_inventory: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    address: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
-
-
-class Inventory(Base):
-    __tablename__ = "inventory"
-
-    inventory_item_id: Mapped[str] = mapped_column(String, primary_key=True)
-    location_id: Mapped[str] = mapped_column(String, primary_key=True)
-    location_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    sku: Mapped[str | None] = mapped_column(String, nullable=True)
-    tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    requires_shipping: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    quantities: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )

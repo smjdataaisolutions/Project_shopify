@@ -20,10 +20,63 @@
 }
 
 .group {
+  border-top: 1px solid #e1e3e5;
+}
+
+.sectionHeader {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionHeader:hover {
+  background: #f7f7f7;
+}
+
+.sectionHeader:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 1px;
+}
+
+.sectionTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 0.5rem;
+  margin-right: 0.25rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+  transition: transform 120ms ease;
+}
+
+.chevronExpanded {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+
+.sectionContent {
   display: grid;
   gap: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e1e3e5;
+  padding: 0 0.25rem 0.625rem;
 }
 
 .options {

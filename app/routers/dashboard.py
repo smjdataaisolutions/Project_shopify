@@ -1,6 +1,6 @@
 from datetime import date
 import logging
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
@@ -31,10 +31,6 @@ def get_overview_filters(
     end_date: date | None = Query(default=None),
     financial_status: Annotated[list[str] | None, Query()] = None,
     fulfillment_status: Annotated[list[str] | None, Query()] = None,
-    inventory_status: Literal[
-        "in_stock", "low_stock", "out_of_stock"
-    ] | None = Query(default=None),
-    location_id: Annotated[list[str] | None, Query()] = None,
 ) -> OverviewFilters:
     try:
         return build_overview_filters(
@@ -42,8 +38,6 @@ def get_overview_filters(
             end_date,
             financial_status,
             fulfillment_status,
-            inventory_status,
-            location_id,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

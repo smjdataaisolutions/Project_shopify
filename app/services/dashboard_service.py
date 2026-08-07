@@ -1,6 +1,5 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Literal
 
 from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
@@ -12,7 +11,6 @@ from app.schemas.dashboard import (
     DashboardSummary,
     InventoryHealthHighlight,
     InventoryHighlightMetrics,
-    LocationFilterOption,
     OverviewFilterOptionsResponse,
     SalesHighlightMetrics,
     SalesPerformanceHighlight,
@@ -30,8 +28,6 @@ def build_overview_filters(
     end_date: date | None,
     financial_statuses: list[str] | None,
     fulfillment_statuses: list[str] | None,
-    inventory_status: Literal["in_stock", "low_stock", "out_of_stock"] | None,
-    location_ids: list[str] | None,
 ) -> OverviewFilters:
     if start_date and end_date and start_date > end_date:
         raise ValueError("start_date must be on or before end_date")
@@ -40,8 +36,6 @@ def build_overview_filters(
         end_date=end_date,
         financial_statuses=tuple(dict.fromkeys(financial_statuses or [])),
         fulfillment_statuses=tuple(dict.fromkeys(fulfillment_statuses or [])),
-        inventory_status=inventory_status,
-        location_ids=tuple(dict.fromkeys(location_ids or [])),
     )
 
 
@@ -81,19 +75,13 @@ class DashboardService:
         return OverviewFilterOptionsResponse(
             order_statuses=list(options.financial_statuses),
             fulfillment_statuses=list(options.fulfillment_statuses),
-            locations=[
-                LocationFilterOption(id=location.id, name=location.name)
-                for location in options.locations
-            ],
         )
 
     def get_business_highlights(
         self, filters: OverviewFilters
     ) -> BusinessHighlightsResponse:
         sales = self.repository.get_sales_metrics(filters)
-        inventory = self.repository.get_inventory_health(
-            self.low_stock_threshold, filters
-        )
+        inventory = self.repository.get_inventory_health(self.low_stock_threshold)
         top_product = self.repository.get_top_selling_product(filters)
 
         highlights: list[BusinessHighlight] = []
@@ -202,14 +190,11 @@ class ActionNeededService:
         self, filters: OverviewFilters = OverviewFilters()
     ) -> ActionNeededResponse:
         sales = self.repository.get_sales_metrics(filters)
-        inventory = self.repository.get_inventory_health(
-            self.low_stock_threshold, filters
-        )
+        inventory = self.repository.get_inventory_health(self.low_stock_threshold)
         affected_inventory = []
         if inventory.out_of_stock_count > 0 or inventory.low_stock_count > 0:
             affected_inventory = self.repository.get_affected_inventory_products(
-                self.low_stock_threshold,
-                filters,
+                self.low_stock_threshold
             )
 
         out_of_stock_products = [

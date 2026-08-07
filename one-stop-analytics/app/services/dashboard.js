@@ -14,13 +14,6 @@ function withOverviewFilters(endpoint, filters = {}) {
   filters.fulfillmentStatuses?.forEach((status) => {
     params.append("fulfillment_status", status);
   });
-  if (filters.inventoryStatus) {
-    params.set("inventory_status", filters.inventoryStatus);
-  }
-  filters.locationIds?.forEach((locationId) => {
-    params.append("location_id", locationId);
-  });
-
   const query = params.toString();
   return query ? `${endpoint}?${query}` : endpoint;
 }

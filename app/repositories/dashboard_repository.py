@@ -1,23 +1,15 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Literal
-
-from sqlalchemy import Integer, case, cast, func, literal, or_, select
-from sqlalchemy.dialects.postgresql import JSONPATH
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    Inventory,
-    Location,
     Order,
     OrderLineItem,
     Product,
     ProductVariant,
 )
-
-
-InventoryStatus = Literal["in_stock", "low_stock", "out_of_stock"]
 
 
 @dataclass(frozen=True)
@@ -26,8 +18,6 @@ class OverviewFilters:
     end_date: date | None = None
     financial_statuses: tuple[str, ...] = ()
     fulfillment_statuses: tuple[str, ...] = ()
-    inventory_status: InventoryStatus | None = None
-    location_ids: tuple[str, ...] = ()
 
     @property
     def has_order_filters(self) -> bool:
@@ -37,11 +27,6 @@ class OverviewFilters:
             or self.financial_statuses
             or self.fulfillment_statuses
         )
-
-    @property
-    def has_inventory_filters(self) -> bool:
-        return bool(self.inventory_status or self.location_ids)
-
 
 @dataclass(frozen=True)
 class OverviewSalesMetrics:
@@ -86,16 +71,9 @@ class TopProductMetrics:
 
 
 @dataclass(frozen=True)
-class LocationOption:
-    id: str
-    name: str
-
-
-@dataclass(frozen=True)
 class OverviewFilterOptions:
     financial_statuses: tuple[str, ...]
     fulfillment_statuses: tuple[str, ...]
-    locations: tuple[LocationOption, ...]
 
 
 class DashboardRepository:
@@ -121,19 +99,9 @@ class DashboardRepository:
                 .order_by(Order.fulfillment_status)
             ).all()
         )
-        location_rows = self.db.execute(
-            select(Location.id, Location.name)
-            .join(Inventory, Inventory.location_id == Location.id)
-            .where(Location.name.is_not(None))
-            .distinct()
-            .order_by(Location.name, Location.id)
-        ).all()
         return OverviewFilterOptions(
             financial_statuses=financial_statuses,
             fulfillment_statuses=fulfillment_statuses,
-            locations=tuple(
-                LocationOption(id=row.id, name=row.name) for row in location_rows
-            ),
         )
 
     def get_dashboard_summary(
@@ -141,24 +109,13 @@ class DashboardRepository:
         filters: OverviewFilters,
         low_stock_threshold: int,
     ) -> DashboardSummaryMetrics:
-        inventory_rows = self._filtered_inventory_rows(
-            filters, low_stock_threshold
-        ).subquery()
-
-        if filters.has_inventory_filters:
-            total_products = self.db.scalar(
-                select(func.count(func.distinct(inventory_rows.c.product_id)))
-            ) or 0
-            total_variants = self.db.scalar(
-                select(func.count(func.distinct(inventory_rows.c.variant_id)))
-            ) or 0
-        else:
-            total_products = self.db.scalar(
-                select(func.count()).select_from(Product)
-            ) or 0
-            total_variants = self.db.scalar(
-                select(func.count()).select_from(ProductVariant)
-            ) or 0
+        inventory_rows = self._inventory_rows().subquery()
+        total_products = self.db.scalar(
+            select(func.count()).select_from(Product)
+        ) or 0
+        total_variants = self.db.scalar(
+            select(func.count()).select_from(ProductVariant)
+        ) or 0
 
         inventory = self._inventory_health_from_rows(
             inventory_rows, low_stock_threshold
@@ -216,17 +173,15 @@ class DashboardRepository:
     def get_inventory_health(
         self,
         low_stock_threshold: int,
-        filters: OverviewFilters = OverviewFilters(),
     ) -> InventoryHealthMetrics:
-        rows = self._filtered_inventory_rows(filters, low_stock_threshold).subquery()
+        rows = self._inventory_rows().subquery()
         return self._inventory_health_from_rows(rows, low_stock_threshold)
 
     def get_affected_inventory_products(
         self,
         low_stock_threshold: int,
-        filters: OverviewFilters = OverviewFilters(),
     ) -> list[InventoryAffectedProduct]:
-        rows = self._filtered_inventory_rows(filters, low_stock_threshold).subquery()
+        rows = self._inventory_rows().subquery()
         out_of_stock = func.max(
             case((rows.c.inventory_quantity == 0, 1), else_=0)
         ).label("out_of_stock")
@@ -321,64 +276,12 @@ class DashboardRepository:
             )
         return statement
 
-    def _filtered_inventory_rows(
-        self,
-        filters: OverviewFilters,
-        low_stock_threshold: int,
-    ):
-        if filters.location_ids:
-            available_quantity = cast(
-                func.jsonb_path_query_first(
-                    Inventory.quantities,
-                    cast(
-                        literal('$[*] ? (@.name == "available").quantity'),
-                        JSONPATH,
-                    ),
-                ),
-                Integer,
-            )
-            location_inventory = (
-                select(
-                    Inventory.inventory_item_id,
-                    func.sum(func.coalesce(available_quantity, 0)).label(
-                        "inventory_quantity"
-                    ),
-                )
-                .where(Inventory.location_id.in_(filters.location_ids))
-                .group_by(Inventory.inventory_item_id)
-                .subquery()
-            )
-            statement = select(
-                ProductVariant.id.label("variant_id"),
-                ProductVariant.product_id,
-                location_inventory.c.inventory_quantity,
-            ).join(
-                location_inventory,
-                location_inventory.c.inventory_item_id
-                == ProductVariant.inventory_item_id,
-            )
-        else:
-            statement = select(
-                ProductVariant.id.label("variant_id"),
-                ProductVariant.product_id,
-                ProductVariant.inventory_quantity,
-            )
-
-        if filters.inventory_status == "out_of_stock":
-            statement = statement.where(
-                statement.selected_columns.inventory_quantity == 0
-            )
-        elif filters.inventory_status == "low_stock":
-            statement = statement.where(
-                statement.selected_columns.inventory_quantity.between(
-                    1, low_stock_threshold
-                )
-            )
-        elif filters.inventory_status == "in_stock":
-            statement = statement.where(
-                statement.selected_columns.inventory_quantity > low_stock_threshold
-            )
-        return statement
+    def _inventory_rows(self):
+        return select(
+            ProductVariant.id.label("variant_id"),
+            ProductVariant.product_id,
+            ProductVariant.inventory_quantity,
+        )
 
     def _inventory_health_from_rows(
         self,

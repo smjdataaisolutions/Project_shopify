@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { fetchOverviewFilterOptions } from "../../services/dashboard";
 import styles from "./overviewFilters.module.css";
 
@@ -13,13 +13,6 @@ const DATE_PRESETS = [
   ["previous_month", "Previous month"],
   ["this_year", "This year"],
   ["custom", "Custom range"],
-];
-
-const INVENTORY_OPTIONS = [
-  [null, "All"],
-  ["in_stock", "In stock"],
-  ["low_stock", "Low stock"],
-  ["out_of_stock", "Out of stock"],
 ];
 
 function formatDate(date) {
@@ -72,6 +65,36 @@ function FilterOption({ label, selected, onClick }) {
   );
 }
 
+function CollapsibleFilterSection({ title, children, defaultExpanded = false }) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const contentId = useId();
+
+  return (
+    <div className={styles.group}>
+      <button
+        type="button"
+        className={styles.sectionHeader}
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+      >
+        <span className={styles.sectionTitle}>{title}</span>
+        <span
+          className={`${styles.chevron} ${
+            isExpanded ? styles.chevronExpanded : ""
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+      {isExpanded ? (
+        <div id={contentId} className={styles.sectionContent}>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
   if (!options.length) return null;
 
@@ -84,8 +107,7 @@ function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
   };
 
   return (
-    <div className={styles.group}>
-      <s-heading>{heading}</s-heading>
+    <CollapsibleFilterSection title={heading}>
       <div className={styles.options}>
         {options.map((option) => {
           const value = typeof option === "string" ? option : option.id;
@@ -100,7 +122,7 @@ function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
           );
         })}
       </div>
-    </div>
+    </CollapsibleFilterSection>
   );
 }
 
@@ -144,8 +166,6 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
       endDate: "",
       orderStatuses: [],
       fulfillmentStatuses: [],
-      inventoryStatus: null,
-      locationIds: [],
     });
   };
 
@@ -157,7 +177,7 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
       aria-hidden={isCollapsed}
     >
       <s-box padding="base" borderWidth="base" borderRadius="base" background="base">
-        <s-stack direction="block" gap="base">
+        <s-stack direction="block" gap="small">
           <div className={styles.header}>
             <s-heading>Filters</s-heading>
             <div className={styles.headerActions}>
@@ -171,8 +191,7 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
             </div>
           </div>
 
-          <div className={styles.group}>
-            <s-heading>Date range</s-heading>
+          <CollapsibleFilterSection title="Date range">
             <div className={styles.options}>
               {DATE_PRESETS.map(([value, label]) => (
                 <FilterOption
@@ -220,7 +239,7 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
             >
               Apply
             </s-button>
-          </div>
+          </CollapsibleFilterSection>
 
           {error ? (
             <s-stack direction="block" gap="small">
@@ -256,26 +275,6 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
                 })}
               />
 
-              <div className={styles.group}>
-                <s-heading>Inventory status</s-heading>
-                <div className={styles.options}>
-                  {INVENTORY_OPTIONS.map(([value, label]) => (
-                    <FilterOption
-                      key={label}
-                      label={label}
-                      selected={filters.inventoryStatus === value}
-                      onClick={() => onChange({ ...filters, inventoryStatus: value })}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <MultiSelectGroup
-                heading="Location"
-                options={options.locations}
-                selectedValues={filters.locationIds}
-                onChange={(locationIds) => onChange({ ...filters, locationIds })}
-              />
             </>
           ) : null}
         </s-stack>
