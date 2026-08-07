@@ -14,15 +14,9 @@ class DashboardSummary(BaseModel):
     average_order_value: float = Field(ge=0)
 
 
-class LocationFilterOption(BaseModel):
-    id: str
-    name: str
-
-
 class OverviewFilterOptionsResponse(BaseModel):
     order_statuses: list[str]
     fulfillment_statuses: list[str]
-    locations: list[LocationFilterOption]
 
 
 class SalesHighlightMetrics(BaseModel):

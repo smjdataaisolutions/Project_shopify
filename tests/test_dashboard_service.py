@@ -21,9 +21,8 @@ class StubDashboardRepository:
         self.filters = filters
         return self.sales
 
-    def get_inventory_health(self, threshold, filters):
+    def get_inventory_health(self, threshold):
         self.inventory_threshold = threshold
-        self.filters = filters
         return self.inventory
 
     def get_top_selling_product(self, filters):
