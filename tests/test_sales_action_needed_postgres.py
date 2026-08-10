@@ -3,6 +3,7 @@ import unittest
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.repositories.sales_repository import SalesFilters
 from app.repositories.sales_repository import SalesRepository
 from app.services.sales_service import SalesService
 
@@ -22,9 +23,9 @@ class SalesActionNeededPostgresTests(unittest.TestCase):
                 settings.refund_rate_threshold,
                 settings.cancellation_rate_threshold,
             )
-            response = service.get_action_needed(None, None)
+            response = service.get_action_needed(SalesFilters())
             export = service.get_action_export(
-                "sales_refund_cancellation_spike", None, None
+                "sales_refund_cancellation_spike", SalesFilters()
             )
 
         payload = response.model_dump(mode="json")

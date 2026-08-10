@@ -18,42 +18,21 @@ from app.schemas.dashboard import (
     TopProductHighlightMetrics,
     TopSellingProductHighlight,
 )
+from app.services.sales_channel_service import group_sales_channels
 
 
 MAX_ACTIONS = 5
 ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
-SALES_CHANNEL_PRESENTATION = (
-    (
-        "online_store",
-        "Online Store",
-        "Order placed through the Shopify storefront",
+SALES_CHANNEL_DESCRIPTIONS = {
+    "online_store": "Order placed through the Shopify storefront",
+    "point_of_sale": "Order created through Shopify POS",
+    "shop": "Order originating from the Shop channel/app",
+    "draft_orders": "Order created from a draft order",
+    "facebook_instagram": "Order associated with Meta sales channels",
+    "other_app_specific_channels": (
+        "Orders created through installed apps or other integrations"
     ),
-    (
-        "point_of_sale",
-        "Point of Sale",
-        "Order created through Shopify POS",
-    ),
-    (
-        "shop",
-        "Shop",
-        "Order originating from the Shop channel/app",
-    ),
-    (
-        "draft_orders",
-        "Draft Orders",
-        "Order created from a draft order",
-    ),
-    (
-        "facebook_instagram",
-        "Facebook & Instagram",
-        "Order associated with Meta sales channels",
-    ),
-    (
-        "other_app_specific_channels",
-        "Other/app-specific channels",
-        "Orders created through installed apps or other integrations",
-    ),
-)
+}
 
 
 def build_overview_filters(
@@ -74,42 +53,17 @@ def build_overview_filters(
     )
 
 
-def categorize_sales_channel(source_name: str) -> str:
-    """Map a Shopify sourceName to a stable merchant-facing category ID."""
-    normalized = source_name.strip().lower().replace("-", "_").replace(" ", "_")
-    if normalized in {"web", "online_store", "shopify_online_store"}:
-        return "online_store"
-    if normalized in {"pos", "shopify_pos"}:
-        return "point_of_sale"
-    if normalized in {"shop", "shop_app"}:
-        return "shop"
-    if normalized in {"shopify_draft_order", "draft_order", "draft_orders"}:
-        return "draft_orders"
-    if any(token in normalized for token in ("facebook", "instagram", "meta")):
-        return "facebook_instagram"
-    return "other_app_specific_channels"
-
-
 def _build_sales_channel_options(
     source_names: tuple[str, ...],
 ) -> list[SalesChannelFilterOption]:
-    grouped = {
-        category_id: []
-        for category_id, _name, _description in SALES_CHANNEL_PRESENTATION
-    }
-    for source_name in source_names:
-        category_id = categorize_sales_channel(source_name)
-        grouped[category_id].append(source_name)
-
     return [
         SalesChannelFilterOption(
             id=category_id,
             name=name,
-            description=description,
-            values=grouped[category_id],
+            description=SALES_CHANNEL_DESCRIPTIONS[category_id],
+            values=values,
         )
-        for category_id, name, description in SALES_CHANNEL_PRESENTATION
-        if grouped[category_id]
+        for category_id, name, values in group_sales_channels(source_names)
     ]
 
 

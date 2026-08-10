@@ -5,7 +5,7 @@ import unittest
 from sqlalchemy.dialects import postgresql
 
 from app.db.models import Order
-from app.repositories.sales_repository import SalesRepository
+from app.repositories.sales_repository import SalesFilters, SalesRepository
 
 
 class SalesRepositoryTests(unittest.TestCase):
@@ -29,10 +29,15 @@ class SalesRepositoryTests(unittest.TestCase):
 
     def test_sales_metrics_reuses_sal_001_formulas_and_processed_date_filters(self):
         repository = SalesRepository(db=object())
-        statement = repository._with_date_filters(
+        statement = repository._apply_filters(
             repository._sales_metrics_statement(),
-            date(2026, 8, 1),
-            date(2026, 8, 10),
+            SalesFilters(
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 10),
+                sales_channels=("web", "pos"),
+                financial_statuses=("PAID",),
+                currency_codes=("USD",),
+            ),
         )
         sql = str(statement.compile(
             dialect=postgresql.dialect(),
@@ -46,13 +51,21 @@ class SalesRepositoryTests(unittest.TestCase):
         self.assertIn("orders.cancelled_at IS NOT NULL", sql)
         self.assertIn("orders.processed_at >= '2026-08-01'", sql)
         self.assertIn("orders.processed_at < '2026-08-11'", sql)
+        self.assertIn("orders.sales_channel IN ('web', 'pos')", sql)
+        self.assertIn("orders.financial_status IN ('PAID')", sql)
+        self.assertIn("orders.currency_code IN ('USD')", sql)
 
     def test_action_export_uses_contributing_orders_products_and_date_filters(self):
         repository = SalesRepository(db=object())
-        statement = repository._with_date_filters(
+        statement = repository._apply_filters(
             repository._action_export_statement(),
-            date(2026, 8, 1),
-            date(2026, 8, 10),
+            SalesFilters(
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 10),
+                sales_channels=("web",),
+                financial_statuses=("REFUNDED",),
+                currency_codes=("USD",),
+            ),
         )
         sql = str(statement.compile(
             dialect=postgresql.dialect(),
@@ -66,6 +79,8 @@ class SalesRepositoryTests(unittest.TestCase):
         self.assertIn("orders.cancelled_at IS NOT NULL", sql)
         self.assertIn("orders.processed_at >= '2026-08-01'", sql)
         self.assertIn("orders.processed_at < '2026-08-11'", sql)
+        self.assertIn("orders.sales_channel IN ('web')", sql)
+        self.assertIn("orders.currency_code IN ('USD')", sql)
 
 
 if __name__ == "__main__":

@@ -5,16 +5,24 @@ import styles from "./revenueTrend.module.css";
 
 function RevenueChart({ points, currency }) {
   const currencyCode = currency || "USD";
-  const fullCurrencyFormatter = useMemo(() => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode,
-  }), [currencyCode]);
-  const compactCurrencyFormatter = useMemo(() => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode,
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }), [currencyCode]);
+  const fullCurrencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currencyCode,
+      }),
+    [currencyCode],
+  );
+  const compactCurrencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currencyCode,
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }),
+    [currencyCode],
+  );
 
   const { line, area, coordinates, xTicks, yTicks, chart } = useMemo(() => {
     const width = 700;
@@ -24,19 +32,30 @@ function RevenueChart({ points, currency }) {
     const graphHeight = height - padding.top - padding.bottom;
     const maximum = Math.max(...points.map((point) => point.revenue), 1);
     const pointCoordinates = points.map((point, index) => {
-      const x = points.length === 1
-        ? padding.left + (graphWidth / 2)
-        : padding.left + (index / (points.length - 1)) * graphWidth;
-      const y = padding.top + graphHeight - (point.revenue / maximum) * graphHeight;
+      const x =
+        points.length === 1
+          ? padding.left + graphWidth / 2
+          : padding.left + (index / (points.length - 1)) * graphWidth;
+      const y =
+        padding.top + graphHeight - (point.revenue / maximum) * graphHeight;
       return { ...point, x, y };
     });
-    const linePath = pointCoordinates.map(({ x, y }, index) => `${index ? "L" : "M"}${x} ${y}`).join(" ");
+    const linePath = pointCoordinates
+      .map(({ x, y }, index) => `${index ? "L" : "M"}${x} ${y}`)
+      .join(" ");
     const areaPath = `${linePath} L ${pointCoordinates.at(-1).x} ${height - padding.bottom} L ${pointCoordinates[0].x} ${height - padding.bottom} Z`;
-    const dateLabel = (value) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
+    const dateLabel = (value) =>
+      new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+      }).format(new Date(`${value}T00:00:00`));
     const xTickCount = Math.min(points.length, 5);
-    const tickIndexes = xTickCount === 1
-      ? [0]
-      : Array.from({ length: xTickCount }, (_, index) => Math.round((index * (points.length - 1)) / (xTickCount - 1)));
+    const tickIndexes =
+      xTickCount === 1
+        ? [0]
+        : Array.from({ length: xTickCount }, (_, index) =>
+            Math.round((index * (points.length - 1)) / (xTickCount - 1)),
+          );
 
     return {
       line: linePath,
@@ -66,9 +85,16 @@ function RevenueChart({ points, currency }) {
           <s-badge>Daily</s-badge>
         </s-stack>
       </div>
-      <svg className={styles.chart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`Daily revenue trend in ${currencyCode}`}>
+      <svg
+        className={styles.chart}
+        viewBox={`0 0 ${chart.width} ${chart.height}`}
+        role="img"
+        aria-label={`Daily revenue trend in ${currencyCode}`}
+      >
         <title>Daily revenue trend</title>
-        <desc>Revenue grouped by the date each Shopify order was processed.</desc>
+        <desc>
+          Revenue grouped by the date each Shopify order was processed.
+        </desc>
         {yTicks.map((tick) => (
           <g key={tick.value}>
             <line
@@ -78,7 +104,12 @@ function RevenueChart({ points, currency }) {
               y1={tick.y}
               y2={tick.y}
             />
-            <text className={styles.axisTick} x={chart.padding.left - 12} y={tick.y + 4} textAnchor="end">
+            <text
+              className={styles.axisTick}
+              x={chart.padding.left - 12}
+              y={tick.y + 4}
+              textAnchor="end"
+            >
               {compactCurrencyFormatter.format(tick.value)}
             </text>
           </g>
@@ -86,19 +117,43 @@ function RevenueChart({ points, currency }) {
         <path className={styles.area} d={area} />
         <path className={styles.line} d={line} />
         {coordinates.map((point) => (
-          <circle key={point.date} className={styles.point} cx={point.x} cy={point.y} r="4">
+          <circle
+            key={point.date}
+            className={styles.point}
+            cx={point.x}
+            cy={point.y}
+            r="4"
+          >
             <title>{`${point.date}: ${fullCurrencyFormatter.format(point.revenue)}`}</title>
           </circle>
         ))}
         {xTicks.map((tick) => (
-          <text key={`${tick.text}-${tick.x}`} x={tick.x} y={chart.height - 31} textAnchor="middle" className={styles.axisTick}>
+          <text
+            key={`${tick.text}-${tick.x}`}
+            x={tick.x}
+            y={chart.height - 31}
+            textAnchor="middle"
+            className={styles.axisTick}
+          >
             {tick.text}
           </text>
         ))}
-        <text className={styles.axisLabel} x={chart.padding.left + ((chart.width - chart.padding.left - chart.padding.right) / 2)} y={chart.height - 5} textAnchor="middle">
+        <text
+          className={styles.axisLabel}
+          x={
+            chart.padding.left +
+            (chart.width - chart.padding.left - chart.padding.right) / 2
+          }
+          y={chart.height - 5}
+          textAnchor="middle"
+        >
           Processed date
         </text>
-        <text className={styles.axisLabel} transform={`translate(18 ${chart.padding.top + (chart.graphHeight / 2)}) rotate(-90)`} textAnchor="middle">
+        <text
+          className={styles.axisLabel}
+          transform={`translate(18 ${chart.padding.top + chart.graphHeight / 2}) rotate(-90)`}
+          textAnchor="middle"
+        >
           Revenue ({currencyCode})
         </text>
       </svg>
@@ -106,7 +161,7 @@ function RevenueChart({ points, currency }) {
   );
 }
 
-export function RevenueTrend() {
+export function RevenueTrend({ filters }) {
   const [trend, setTrend] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -115,11 +170,17 @@ export function RevenueTrend() {
     let active = true;
     setTrend(null);
     setError(null);
-    fetchRevenueTrend()
+    fetchRevenueTrend(filters)
       .then((data) => active && setTrend(data))
-      .catch((requestError) => active && setError(requestError.message || "Unable to load revenue trend."));
-    return () => { active = false; };
-  }, [requestVersion]);
+      .catch(
+        (requestError) =>
+          active &&
+          setError(requestError.message || "Unable to load revenue trend."),
+      );
+    return () => {
+      active = false;
+    };
+  }, [filters, requestVersion]);
 
   const retry = () => setRequestVersion((version) => version + 1);
 
@@ -134,8 +195,19 @@ export function RevenueTrend() {
         </div>
       );
     }
-    if (!trend) return <div className={styles.loading}><s-spinner accessibilityLabel="Loading revenue trend" /><s-text>Loading revenue trend…</s-text></div>;
-    if (!trend.data.length) return <div className={styles.empty}><s-text>No revenue data is available for this date range.</s-text></div>;
+    if (!trend)
+      return (
+        <div className={styles.loading}>
+          <s-spinner accessibilityLabel="Loading revenue trend" />
+          <s-text>Loading revenue trend…</s-text>
+        </div>
+      );
+    if (!trend.data.length)
+      return (
+        <div className={styles.empty}>
+          <s-text>No revenue data is available for this date range.</s-text>
+        </div>
+      );
     return <RevenueChart points={trend.data} currency={trend.currency} />;
   })();
 

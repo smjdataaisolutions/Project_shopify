@@ -7,12 +7,25 @@ from pydantic import BaseModel, Field
 class SalesSummary(BaseModel):
     gross_sales: float = Field(ge=0)
     discounts: float = Field(ge=0)
-    net_sales: float = Field(ge=0)
+    net_sales: float
     shipping: float = Field(ge=0)
     taxes: float = Field(ge=0)
     total_sales: float = Field(ge=0)
     orders_count: int = Field(ge=0)
     average_order_value: float = Field(ge=0)
+    currency: str | None
+
+
+class SalesChannelFilterOption(BaseModel):
+    id: str
+    name: str
+    values: list[str]
+
+
+class SalesFilterOptionsResponse(BaseModel):
+    sales_channels: list[SalesChannelFilterOption]
+    order_statuses: list[str]
+    currencies: list[str]
 
 
 class RevenueTrendPoint(BaseModel):

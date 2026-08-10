@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { KPICard } from "../components/dashboard/KPICard";
 import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import { RevenueTrend } from "../components/sales/RevenueTrend";
 import { SalesActionNeeded } from "../components/sales/SalesActionNeeded";
+import { SalesFilters } from "../components/sales/SalesFilters";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchSalesSummary } from "../services/sales";
 import { authenticate } from "../shopify.server";
@@ -13,19 +14,24 @@ export const loader = async ({ request }) => {
   return null;
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-
 function getMetrics(summary) {
+  const currencyFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: summary.currency || "USD",
+  });
   return [
-    { label: "Gross sales", value: currencyFormatter.format(summary.gross_sales) },
+    {
+      label: "Gross sales",
+      value: currencyFormatter.format(summary.gross_sales),
+    },
     { label: "Discounts", value: currencyFormatter.format(summary.discounts) },
     { label: "Net sales", value: currencyFormatter.format(summary.net_sales) },
     { label: "Shipping", value: currencyFormatter.format(summary.shipping) },
     { label: "Taxes", value: currencyFormatter.format(summary.taxes) },
-    { label: "Total sales", value: currencyFormatter.format(summary.total_sales) },
+    {
+      label: "Total sales",
+      value: currencyFormatter.format(summary.total_sales),
+    },
     { label: "Orders", value: summary.orders_count },
     {
       label: "Average order value",
@@ -35,67 +41,115 @@ function getMetrics(summary) {
 }
 
 export default function Sales() {
+  const [areFiltersCollapsed, setAreFiltersCollapsed] = useState(false);
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    salesChannels: [],
+    orderStatuses: [],
+    currencies: [],
+  });
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const loadSummary = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      setSummary(await fetchSalesSummary());
-    } catch (requestError) {
-      setError(requestError.message || "Unable to load the sales summary.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+    setSummary(null);
+
+    fetchSalesSummary(filters)
+      .then((response) => {
+        if (active) setSummary(response);
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message || "Unable to load the sales summary.");
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [filters, requestVersion]);
 
   return (
-    <s-page heading="Sales">
+    <s-page heading="Sales" inlineSize="large">
       <AnalyticsTopNavigation />
 
-      {isLoading && !summary ? (
-        <s-section heading="Loading sales">
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <s-spinner accessibilityLabel="Loading sales data" />
-            <s-text>Retrieving your latest sales metrics.</s-text>
-          </s-stack>
-        </s-section>
-      ) : null}
+      <div
+        className={`${styles.overviewLayout} ${
+          areFiltersCollapsed ? styles.overviewLayoutCollapsed : ""
+        }`}
+      >
+        <SalesFilters
+          filters={filters}
+          onChange={setFilters}
+          isCollapsed={areFiltersCollapsed}
+          onCollapse={() => setAreFiltersCollapsed(true)}
+        />
 
-      {error ? (
-        <s-section heading="Unable to load sales">
-          <s-stack direction="block" gap="base">
-            <s-text>{error}</s-text>
-            <s-button onClick={loadSummary}>Try again</s-button>
-          </s-stack>
-        </s-section>
-      ) : null}
+        {areFiltersCollapsed ? (
+          <aside
+            className={styles.collapsedFilters}
+            aria-label="Collapsed sales filters"
+          >
+            <s-button
+              icon="chevron-right"
+              variant="tertiary"
+              accessibilityLabel="Expand sales filters"
+              onClick={() => setAreFiltersCollapsed(false)}
+            />
+          </aside>
+        ) : null}
 
-      {summary ? (
-        <s-section heading="Sales overview">
-          <div className={styles.grid}>
-            {getMetrics(summary).map((metric) => (
-              <KPICard key={metric.label} {...metric} />
-            ))}
-          </div>
-        </s-section>
-      ) : null}
+        <div className={styles.overviewContent}>
+          {isLoading && !summary ? (
+            <s-section heading="Loading sales">
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-spinner accessibilityLabel="Loading sales data" />
+                <s-text>Retrieving your latest sales metrics.</s-text>
+              </s-stack>
+            </s-section>
+          ) : null}
 
-      <s-section heading="Revenue trend">
-        <RevenueTrend />
-      </s-section>
+          {error ? (
+            <s-section heading="Unable to load sales">
+              <s-stack direction="block" gap="base">
+                <s-text>{error}</s-text>
+                <s-button
+                  onClick={() => setRequestVersion((version) => version + 1)}
+                >
+                  Try again
+                </s-button>
+              </s-stack>
+            </s-section>
+          ) : null}
 
-      <s-section heading="Action needed">
-        <SalesActionNeeded />
-      </s-section>
+          {summary ? (
+            <s-section heading="Sales overview">
+              <div className={styles.grid}>
+                {getMetrics(summary).map((metric) => (
+                  <KPICard key={metric.label} {...metric} />
+                ))}
+              </div>
+            </s-section>
+          ) : null}
 
+          <s-section heading="Revenue trend">
+            <RevenueTrend filters={filters} />
+          </s-section>
+
+          <s-section heading="Action needed">
+            <SalesActionNeeded filters={filters} />
+          </s-section>
+        </div>
+      </div>
     </s-page>
   );
 }
