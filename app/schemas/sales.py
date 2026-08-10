@@ -31,3 +31,20 @@ class RevenueTrendResponse(BaseModel):
     interval: Literal["daily"]
     data: list[RevenueTrendPoint]
     highlights: RevenueTrendHighlights | None
+
+
+class SalesAction(BaseModel):
+    id: str
+    priority: Literal["critical", "warning", "recommendation"]
+    category: Literal["sales"]
+    title: str
+    message: str
+    recommended_action: str
+    action_label: str
+    action_url: str
+    download_available: bool = False
+
+
+class SalesActionNeededResponse(BaseModel):
+    has_sufficient_data: bool
+    actions: list[SalesAction]

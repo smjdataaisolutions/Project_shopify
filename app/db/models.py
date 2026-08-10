@@ -38,6 +38,12 @@ class Order(Base):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    refunded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
     financial_status: Mapped[str | None] = mapped_column(String, nullable=True)
     fulfillment_status: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -46,6 +52,8 @@ class Order(Base):
     total_shipping: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_tax: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_refunded: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    refund_reason: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class OrderLineItem(Base):

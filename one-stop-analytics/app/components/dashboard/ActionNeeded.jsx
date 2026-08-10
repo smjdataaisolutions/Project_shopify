@@ -10,10 +10,11 @@ const PRIORITY_PRESENTATION = {
 };
 const PRODUCT_PREVIEW_LIMIT = 3;
 
-function ActionCard({ action }) {
+function ActionCard({ action, onDownload, downloadingActionId }) {
   const [showAllProducts, setShowAllProducts] = useState(false);
-  const presentation = PRIORITY_PRESENTATION[action.priority]
-    || PRIORITY_PRESENTATION.recommendation;
+  const presentation =
+    PRIORITY_PRESENTATION[action.priority] ||
+    PRIORITY_PRESENTATION.recommendation;
   const affectedProducts = action.affected_products || [];
   const visibleProducts = showAllProducts
     ? affectedProducts
@@ -22,47 +23,84 @@ function ActionCard({ action }) {
 
   return (
     <s-box
+      className={styles.card}
       padding="base"
       borderWidth="base"
       borderRadius="base"
       background="base"
     >
-      <s-stack direction="block" gap="base">
-        <div className={styles.cardHeader}>
-          <s-heading>{action.title}</s-heading>
-          <s-badge tone={presentation.tone}>{presentation.label}</s-badge>
-        </div>
-        <s-text>{action.message}</s-text>
-        {affectedProducts.length ? (
+      <div className={styles.cardContent}>
+        <s-stack direction="block" gap="base">
+          <div className={styles.cardHeader}>
+            <s-heading>{action.title}</s-heading>
+            <s-badge tone={presentation.tone}>{presentation.label}</s-badge>
+          </div>
+          <s-text>{action.message}</s-text>
+          {affectedProducts.length ? (
+            <s-stack direction="block" gap="small">
+              <s-text>
+                <strong>Affected products</strong>
+              </s-text>
+              <ul className={styles.productList}>
+                {visibleProducts.map((product) => (
+                  <li key={product.product_id}>
+                    {product.product_title} — {product.inventory_quantity}{" "}
+                    {product.inventory_quantity === 1 ? "unit" : "units"}
+                  </li>
+                ))}
+              </ul>
+              {hasMoreProducts ? (
+                <s-button
+                  onClick={() => setShowAllProducts((isVisible) => !isVisible)}
+                >
+                  {showAllProducts ? "Show fewer products" : "View products"}
+                </s-button>
+              ) : null}
+            </s-stack>
+          ) : null}
           <s-stack direction="block" gap="small">
             <s-text>
-              <strong>Affected products</strong>
+              <strong>Recommended action</strong>
             </s-text>
-            <ul className={styles.productList}>
-              {visibleProducts.map((product) => (
-                <li key={product.product_id}>
-                  {product.product_title} — {product.inventory_quantity}{" "}
-                  {product.inventory_quantity === 1 ? "unit" : "units"}
-                </li>
-              ))}
-            </ul>
-            {hasMoreProducts ? (
+            <s-text>{action.recommended_action}</s-text>
+          </s-stack>
+        </s-stack>
+        {(action.action_label && action.action_url) ||
+        (action.download_available && onDownload) ? (
+          <div className={styles.actionFooter}>
+            {action.download_available && onDownload ? (
               <s-button
-                onClick={() => setShowAllProducts((isVisible) => !isVisible)}
-              >
-                {showAllProducts ? "Show fewer products" : "View products"}
+                icon="download"
+                variant="tertiary"
+                accessibilityLabel={`Download records for ${action.title}`}
+                loading={downloadingActionId === action.id}
+                onClick={() => onDownload(action)}
+              />
+            ) : null}
+            {action.action_label && action.action_url ? (
+              <s-button href={action.action_url} target="_top">
+                {action.action_label}
               </s-button>
             ) : null}
-          </s-stack>
+          </div>
         ) : null}
-        <s-stack direction="block" gap="small">
-          <s-text>
-            <strong>Recommended action</strong>
-          </s-text>
-          <s-text>{action.recommended_action}</s-text>
-        </s-stack>
-      </s-stack>
+      </div>
     </s-box>
+  );
+}
+
+export function ActionCards({ actions, onDownload, downloadingActionId }) {
+  return (
+    <div className={styles.grid}>
+      {actions.map((action) => (
+        <ActionCard
+          key={action.id}
+          action={action}
+          onDownload={onDownload}
+          downloadingActionId={downloadingActionId}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -80,11 +118,15 @@ export function ActionNeeded({ filters }) {
       .then((response) => active && setActions(response.actions))
       .catch((requestError) => {
         if (active) {
-          setError(requestError.message || "Unable to load recommended actions.");
+          setError(
+            requestError.message || "Unable to load recommended actions.",
+          );
         }
       });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [filters, requestVersion]);
 
   if (error) {
@@ -112,16 +154,12 @@ export function ActionNeeded({ filters }) {
   if (!actions.length) {
     return (
       <div className={styles.state}>
-        <s-text>No urgent actions were identified. Your store looks healthy.</s-text>
+        <s-text>
+          No urgent actions were identified. Your store looks healthy.
+        </s-text>
       </div>
     );
   }
 
-  return (
-    <div className={styles.grid}>
-      {actions.map((action) => (
-        <ActionCard key={action.id} action={action} />
-      ))}
-    </div>
-  );
+  return <ActionCards actions={actions} />;
 }

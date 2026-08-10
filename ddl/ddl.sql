@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS orders (
   customer_id TEXT,
   created_at TIMESTAMPTZ,
   processed_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  refunded_at TIMESTAMPTZ,
   currency_code TEXT,
   financial_status TEXT,
   fulfillment_status TEXT,
@@ -69,7 +71,9 @@ CREATE TABLE IF NOT EXISTS orders (
   total_discount NUMERIC,
   total_shipping NUMERIC,
   total_tax NUMERIC,
-  total_price NUMERIC
+  total_price NUMERIC,
+  total_refunded NUMERIC,
+  refund_reason TEXT
 );
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
@@ -77,6 +81,10 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_price NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_refunded NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS order_line_items (
   id TEXT PRIMARY KEY,
