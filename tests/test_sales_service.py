@@ -4,8 +4,13 @@ from decimal import Decimal
 import io
 import unittest
 
-from app.repositories.sales_repository import SalesActionExportRow, SalesMetrics
-from app.services.sales_service import SalesService
+from app.repositories.sales_repository import (
+    SalesActionExportRow,
+    SalesFilterOptions,
+    SalesFilters,
+    SalesMetrics,
+)
+from app.services.sales_service import SalesService, build_sales_filters
 
 
 class StubSalesRepository:
@@ -14,23 +19,31 @@ class StubSalesRepository:
         self.metrics = metrics
         self.received_dates = None
 
-    def get_revenue_trend(self, start_date, end_date):
-        self.received_dates = (start_date, end_date)
+    def get_revenue_trend(self, filters):
+        self.received_dates = (filters.start_date, filters.end_date)
         return self.rows
 
-    def get_sales_metrics(self, start_date=None, end_date=None):
-        self.received_dates = (start_date, end_date)
+    def get_sales_metrics(self, filters=SalesFilters()):
+        self.received_dates = (filters.start_date, filters.end_date)
         return self.metrics
 
-    def get_action_export_rows(self, start_date, end_date):
-        self.received_dates = (start_date, end_date)
+    def get_action_export_rows(self, filters):
+        self.received_dates = (filters.start_date, filters.end_date)
         return self.rows
+
+    def get_filter_options(self):
+        return SalesFilterOptions(
+            sales_channels=("web", "pos", "mobile_app"),
+            financial_statuses=("PAID", "REFUNDED"),
+            currency_codes=("CAD", "USD"),
+        )
 
 
 def build_metrics(
     *,
     gross_sales=Decimal("100.00"),
     discounts=Decimal("0.00"),
+    net_sales=None,
     total_sales=Decimal("100.00"),
     orders_count=2,
     average_order_value=Decimal("50.00"),
@@ -42,7 +55,7 @@ def build_metrics(
     return SalesMetrics(
         gross_sales=gross_sales,
         discounts=discounts,
-        net_sales=total_sales,
+        net_sales=total_sales if net_sales is None else net_sales,
         shipping=Decimal("0.00"),
         taxes=Decimal("0.00"),
         total_sales=total_sales,
@@ -56,6 +69,22 @@ def build_metrics(
 
 
 class SalesServiceTests(unittest.TestCase):
+    def test_sales_summary_allows_negative_net_sales_after_filtering(self):
+        metrics = build_metrics(
+            gross_sales=Decimal("0.00"),
+            discounts=Decimal("56.84"),
+            net_sales=Decimal("-56.84"),
+            total_sales=Decimal("0.00"),
+            orders_count=1,
+            average_order_value=Decimal("0.00"),
+        )
+
+        result = SalesService(
+            StubSalesRepository(metrics=metrics)
+        ).get_sales_summary(SalesFilters())
+
+        self.assertEqual(result.net_sales, -56.84)
+
     def test_builds_chronological_chart_response_and_highlights(self):
         repository = StubSalesRepository(
             [
@@ -64,9 +93,9 @@ class SalesServiceTests(unittest.TestCase):
             ]
         )
 
-        result = SalesService(repository).get_revenue_trend(
-            date(2026, 1, 1), date(2026, 1, 31)
-        )
+        result = SalesService(repository).get_revenue_trend(SalesFilters(
+            start_date=date(2026, 1, 1), end_date=date(2026, 1, 31)
+        ))
 
         self.assertEqual(
             repository.received_dates, (date(2026, 1, 1), date(2026, 1, 31))
@@ -82,7 +111,7 @@ class SalesServiceTests(unittest.TestCase):
         self.assertAlmostEqual(result.highlights.highest_daily_revenue, 250.25)
 
     def test_returns_clean_empty_response(self):
-        result = SalesService(StubSalesRepository([])).get_revenue_trend(None, None)
+        result = SalesService(StubSalesRepository([])).get_revenue_trend(SalesFilters())
 
         self.assertIsNone(result.currency)
         self.assertEqual(result.data, [])
@@ -92,9 +121,7 @@ class SalesServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, "start_date must be on or before end_date"
         ):
-            SalesService(StubSalesRepository([])).get_revenue_trend(
-                date(2026, 2, 1), date(2026, 1, 1)
-            )
+            build_sales_filters(date(2026, 2, 1), date(2026, 1, 1))
 
     def test_sales_summary_preserves_sal_001_response_defaults(self):
         metrics = build_metrics(
@@ -118,8 +145,23 @@ class SalesServiceTests(unittest.TestCase):
                 "total_sales": 0.0,
                 "orders_count": 0,
                 "average_order_value": 0.0,
+                "currency": "USD",
             },
         )
+
+    def test_filter_options_are_clean_grouped_and_postgresql_backed(self):
+        response = SalesService(StubSalesRepository()).get_filter_options()
+
+        self.assertEqual(
+            [(option.name, option.values) for option in response.sales_channels],
+            [
+                ("Online Store", ["web"]),
+                ("Point of Sale", ["pos"]),
+                ("Other/app-specific channels", ["mobile_app"]),
+            ],
+        )
+        self.assertEqual(response.order_statuses, ["PAID", "REFUNDED"])
+        self.assertEqual(response.currencies, ["CAD", "USD"])
 
     def test_no_orders_rule_uses_reliable_zero_only(self):
         service = SalesService(
@@ -134,7 +176,7 @@ class SalesServiceTests(unittest.TestCase):
             ))
         )
 
-        response = service.get_action_needed(None, None)
+        response = service.get_action_needed(SalesFilters())
 
         self.assertTrue(response.has_sufficient_data)
         self.assertEqual([action.id for action in response.actions], ["sales_no_orders"])
@@ -151,7 +193,7 @@ class SalesServiceTests(unittest.TestCase):
                 currency_code=None,
                 currency_count=0,
             ))
-        ).get_action_needed(None, None)
+        ).get_action_needed(SalesFilters())
         self.assertFalse(missing_response.has_sufficient_data)
         self.assertEqual(missing_response.actions, [])
 
@@ -169,7 +211,7 @@ class SalesServiceTests(unittest.TestCase):
                         average_order_value=average_order_value
                     )),
                     low_aov_threshold=Decimal("50.00"),
-                ).get_action_needed(None, None)
+                ).get_action_needed(SalesFilters())
                 action_ids = {action.id for action in response.actions}
                 self.assertEqual("sales_low_average_order_value" in action_ids, expected)
 
@@ -190,7 +232,7 @@ class SalesServiceTests(unittest.TestCase):
                         discounts=discounts,
                     )),
                     high_discount_rate_threshold=Decimal("0.20"),
-                ).get_action_needed(None, None)
+                ).get_action_needed(SalesFilters())
                 action_ids = {action.id for action in response.actions}
                 self.assertEqual("sales_high_discount_usage" in action_ids, expected)
 
@@ -216,7 +258,7 @@ class SalesServiceTests(unittest.TestCase):
                     )),
                     refund_rate_threshold=Decimal("0.10"),
                     cancellation_rate_threshold=Decimal("0.10"),
-                ).get_action_needed(None, None)
+                ).get_action_needed(SalesFilters())
                 matching = [
                     action for action in response.actions
                     if action.id == "sales_refund_cancellation_spike"
@@ -256,8 +298,9 @@ class SalesServiceTests(unittest.TestCase):
 
         export = SalesService(repository).get_action_export(
             "sales_refund_cancellation_spike",
-            date(2026, 8, 1),
-            date(2026, 8, 10),
+            SalesFilters(
+                start_date=date(2026, 8, 1), end_date=date(2026, 8, 10)
+            ),
         )
         records = list(csv.DictReader(io.StringIO(export.content)))
 
@@ -273,7 +316,7 @@ class SalesServiceTests(unittest.TestCase):
     def test_action_export_rejects_unsupported_actions(self):
         with self.assertRaises(LookupError):
             SalesService(StubSalesRepository()).get_action_export(
-                "sales_low_average_order_value", None, None
+                "sales_low_average_order_value", SalesFilters()
             )
 
     def test_actions_are_stable_unique_limited_and_date_filtered(self):
@@ -285,9 +328,9 @@ class SalesServiceTests(unittest.TestCase):
             orders_count=10,
         ))
 
-        response = SalesService(repository).get_action_needed(
-            date(2026, 8, 1), date(2026, 8, 10)
-        )
+        response = SalesService(repository).get_action_needed(SalesFilters(
+            start_date=date(2026, 8, 1), end_date=date(2026, 8, 10)
+        ))
 
         self.assertEqual(repository.received_dates, (date(2026, 8, 1), date(2026, 8, 10)))
         self.assertEqual(

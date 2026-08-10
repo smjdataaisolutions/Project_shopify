@@ -6,6 +6,7 @@ import io
 
 from app.repositories.sales_repository import (
     SalesActionExportRow,
+    SalesFilters,
     SalesMetrics,
     SalesRepository,
 )
@@ -15,8 +16,11 @@ from app.schemas.sales import (
     RevenueTrendResponse,
     SalesAction,
     SalesActionNeededResponse,
+    SalesChannelFilterOption,
+    SalesFilterOptionsResponse,
     SalesSummary,
 )
+from app.services.sales_channel_service import group_sales_channels
 
 
 REFUND_CANCELLATION_ACTION_ID = "sales_refund_cancellation_spike"
@@ -37,6 +41,23 @@ class SalesActionCsvExport:
     content: str
 
 
+def build_sales_filters(
+    start_date: date | None,
+    end_date: date | None,
+    sales_channels: list[str] | None = None,
+    financial_statuses: list[str] | None = None,
+    currency_codes: list[str] | None = None,
+) -> SalesFilters:
+    SalesService._validate_date_range(start_date, end_date)
+    return SalesFilters(
+        start_date=start_date,
+        end_date=end_date,
+        sales_channels=tuple(dict.fromkeys(sales_channels or [])),
+        financial_statuses=tuple(dict.fromkeys(financial_statuses or [])),
+        currency_codes=tuple(dict.fromkeys(currency_codes or [])),
+    )
+
+
 class SalesService:
     """Business logic for sales analytics."""
 
@@ -54,8 +75,8 @@ class SalesService:
         self.refund_rate_threshold = refund_rate_threshold
         self.cancellation_rate_threshold = cancellation_rate_threshold
 
-    def get_sales_summary(self) -> SalesSummary:
-        metrics = self.repository.get_sales_metrics()
+    def get_sales_summary(self, filters: SalesFilters = SalesFilters()) -> SalesSummary:
+        metrics = self.repository.get_sales_metrics(filters)
         return SalesSummary(
             gross_sales=float(metrics.gross_sales or 0),
             discounts=float(metrics.discounts or 0),
@@ -65,16 +86,31 @@ class SalesService:
             total_sales=float(metrics.total_sales or 0),
             orders_count=metrics.orders_count or 0,
             average_order_value=float(metrics.average_order_value or 0),
+            currency=(
+                metrics.currency_code
+                if metrics.currency_count == 1 and metrics.currency_code
+                else None
+            ),
+        )
+
+    def get_filter_options(self) -> SalesFilterOptionsResponse:
+        options = self.repository.get_filter_options()
+        return SalesFilterOptionsResponse(
+            sales_channels=[
+                SalesChannelFilterOption(id=category_id, name=name, values=values)
+                for category_id, name, values in group_sales_channels(
+                    options.sales_channels
+                )
+            ],
+            order_statuses=list(options.financial_statuses),
+            currencies=list(options.currency_codes),
         )
 
     def get_revenue_trend(
         self,
-        start_date: date | None,
-        end_date: date | None,
+        filters: SalesFilters,
     ) -> RevenueTrendResponse:
-        self._validate_date_range(start_date, end_date)
-
-        rows = self.repository.get_revenue_trend(start_date, end_date)
+        rows = self.repository.get_revenue_trend(filters)
         points = [
             RevenueTrendPoint(date=period, revenue=float(revenue))
             for period, revenue, _currency in rows
@@ -105,11 +141,9 @@ class SalesService:
 
     def get_action_needed(
         self,
-        start_date: date | None,
-        end_date: date | None,
+        filters: SalesFilters,
     ) -> SalesActionNeededResponse:
-        self._validate_date_range(start_date, end_date)
-        metrics = self.repository.get_sales_metrics(start_date, end_date)
+        metrics = self.repository.get_sales_metrics(filters)
         actions: list[SalesAction] = []
 
         if metrics.orders_count == 0:
@@ -244,15 +278,13 @@ class SalesService:
     def get_action_export(
         self,
         action_id: str,
-        start_date: date | None,
-        end_date: date | None,
+        filters: SalesFilters,
     ) -> SalesActionCsvExport:
         """Build a safe CSV export for a supported Sales Action Needed rule."""
-        self._validate_date_range(start_date, end_date)
         if action_id != REFUND_CANCELLATION_ACTION_ID:
             raise LookupError(f"CSV export is not available for action '{action_id}'.")
 
-        rows = self.repository.get_action_export_rows(start_date, end_date)
+        rows = self.repository.get_action_export_rows(filters)
         records = self._group_action_export_rows(rows)
         output = io.StringIO(newline="")
         writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS, lineterminator="\r\n")

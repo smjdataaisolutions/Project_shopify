@@ -7,7 +7,7 @@ import {
   fetchSalesActionNeeded,
 } from "../../services/sales";
 
-export function SalesActionNeeded({ startDate, endDate }) {
+export function SalesActionNeeded({ filters }) {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
   const [downloadError, setDownloadError] = useState(null);
@@ -20,7 +20,7 @@ export function SalesActionNeeded({ startDate, endDate }) {
     setError(null);
     setDownloadError(null);
 
-    fetchSalesActionNeeded({ startDate, endDate })
+    fetchSalesActionNeeded(filters)
       .then((data) => active && setResponse(data))
       .catch((requestError) => {
         if (active) {
@@ -33,7 +33,7 @@ export function SalesActionNeeded({ startDate, endDate }) {
     return () => {
       active = false;
     };
-  }, [startDate, endDate, requestVersion]);
+  }, [filters, requestVersion]);
 
   const downloadRecords = async (action) => {
     setDownloadError(null);
@@ -41,8 +41,7 @@ export function SalesActionNeeded({ startDate, endDate }) {
     try {
       await downloadSalesActionNeededCsv({
         actionId: action.id,
-        startDate,
-        endDate,
+        filters,
       });
     } catch (requestError) {
       setDownloadError(

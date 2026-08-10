@@ -7,15 +7,26 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.repositories.sales_repository import SalesActionExportRow, SalesMetrics
+from app.repositories.sales_repository import (
+    SalesActionExportRow,
+    SalesFilterOptions,
+    SalesFilters,
+    SalesMetrics,
+)
 from app.routers.sales import (
     download_sales_action_needed_records,
     get_revenue_trend,
     get_sales_action_needed,
+    get_sales_filter_options,
+    get_sales_filters,
     get_sales_summary,
     router,
 )
-from app.schemas.sales import RevenueTrendResponse, SalesActionNeededResponse
+from app.schemas.sales import (
+    RevenueTrendResponse,
+    SalesActionNeededResponse,
+    SalesFilterOptionsResponse,
+)
 
 
 class StubResult:
@@ -31,9 +42,10 @@ class StubSession:
 class SalesApiTests(unittest.TestCase):
     def test_returns_chart_ready_response(self):
         response = get_revenue_trend(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31),
             interval="daily",
+            filters=SalesFilters(
+                start_date=date(2026, 1, 1), end_date=date(2026, 1, 31)
+            ),
             db=StubSession(),
         )
 
@@ -61,11 +73,12 @@ class SalesApiTests(unittest.TestCase):
 
     def test_rejects_reversed_date_range(self):
         with self.assertRaises(HTTPException) as context:
-            get_revenue_trend(
+            get_sales_filters(
                 start_date=date(2026, 2, 1),
                 end_date=date(2026, 1, 1),
-                interval="daily",
-                db=StubSession(),
+                sales_channel=None,
+                financial_status=None,
+                currency=None,
             )
 
         self.assertEqual(context.exception.status_code, 422)
@@ -85,7 +98,7 @@ class SalesApiTests(unittest.TestCase):
             currency_count=1,
         )
 
-        response = get_sales_summary(db=object())
+        response = get_sales_summary(filters=SalesFilters(), db=object())
 
         self.assertEqual(response.model_dump(), {
             "gross_sales": 120.0,
@@ -96,7 +109,28 @@ class SalesApiTests(unittest.TestCase):
             "total_sales": 115.0,
             "orders_count": 2,
             "average_order_value": 57.5,
+            "currency": "USD",
         })
+
+    @patch("app.routers.sales.SalesRepository.get_filter_options")
+    def test_filter_options_endpoint_returns_database_dimensions(self, get_options):
+        get_options.return_value = SalesFilterOptions(
+            sales_channels=("web",),
+            financial_statuses=("PAID",),
+            currency_codes=("USD",),
+        )
+
+        response = get_sales_filter_options(db=object())
+
+        self.assertEqual(response.sales_channels[0].name, "Online Store")
+        self.assertEqual(response.sales_channels[0].values, ["web"])
+        self.assertEqual(response.order_statuses, ["PAID"])
+        self.assertEqual(response.currencies, ["USD"])
+        route = next(
+            route for route in router.routes
+            if route.path == "/api/sales/filter-options"
+        )
+        self.assertEqual(route.response_model, SalesFilterOptionsResponse)
 
     @patch("app.routers.sales.SalesRepository.get_sales_metrics")
     def test_action_needed_returns_clean_date_filtered_response(self, get_metrics):
@@ -114,8 +148,13 @@ class SalesApiTests(unittest.TestCase):
         )
 
         response = get_sales_action_needed(
-            start_date=date(2026, 8, 1),
-            end_date=date(2026, 8, 10),
+            filters=SalesFilters(
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 10),
+                sales_channels=("web",),
+                financial_statuses=("PAID",),
+                currency_codes=("USD",),
+            ),
             db=object(),
             settings=SimpleNamespace(
                 low_aov_threshold=Decimal("50.00"),
@@ -144,7 +183,10 @@ class SalesApiTests(unittest.TestCase):
                 "action_url": "shopify://admin/discounts",
             },
         )
-        get_metrics.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 10))
+        called_filters = get_metrics.call_args.args[0]
+        self.assertEqual(called_filters.sales_channels, ("web",))
+        self.assertEqual(called_filters.financial_statuses, ("PAID",))
+        self.assertEqual(called_filters.currency_codes, ("USD",))
 
     def test_action_needed_route_uses_documented_contract(self):
         route = next(
@@ -171,8 +213,9 @@ class SalesApiTests(unittest.TestCase):
 
         response = download_sales_action_needed_records(
             action_id="sales_refund_cancellation_spike",
-            start_date=date(2026, 8, 1),
-            end_date=date(2026, 8, 10),
+            filters=SalesFilters(
+                start_date=date(2026, 8, 1), end_date=date(2026, 8, 10)
+            ),
             db=object(),
         )
 
@@ -181,7 +224,9 @@ class SalesApiTests(unittest.TestCase):
         self.assertIn("attachment;", response.headers["content-disposition"])
         self.assertIn(b"order_id,product_name,financial_status", response.body)
         self.assertIn(b"gid://shopify/Order/1,Example product", response.body)
-        get_rows.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 10))
+        called_filters = get_rows.call_args.args[0]
+        self.assertEqual(called_filters.start_date, date(2026, 8, 1))
+        self.assertEqual(called_filters.end_date, date(2026, 8, 10))
 
     def test_action_export_route_is_reusable_and_rejects_unknown_actions(self):
         route = next(
@@ -193,8 +238,7 @@ class SalesApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as context:
             download_sales_action_needed_records(
                 action_id="unsupported",
-                start_date=None,
-                end_date=None,
+                filters=SalesFilters(),
                 db=object(),
             )
         self.assertEqual(context.exception.status_code, 404)
@@ -206,8 +250,7 @@ class SalesApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as context:
             download_sales_action_needed_records(
                 action_id="sales_refund_cancellation_spike",
-                start_date=None,
-                end_date=None,
+                filters=SalesFilters(),
                 db=object(),
             )
 
@@ -220,16 +263,12 @@ class SalesApiTests(unittest.TestCase):
 
     def test_action_needed_rejects_reversed_date_range(self):
         with self.assertRaises(HTTPException) as context:
-            get_sales_action_needed(
+            get_sales_filters(
                 start_date=date(2026, 8, 10),
                 end_date=date(2026, 8, 1),
-                db=object(),
-                settings=SimpleNamespace(
-                    low_aov_threshold=Decimal("50.00"),
-                    high_discount_rate_threshold=Decimal("0.20"),
-                    refund_rate_threshold=Decimal("0.10"),
-                    cancellation_rate_threshold=Decimal("0.10"),
-                ),
+                sales_channel=None,
+                financial_status=None,
+                currency=None,
             )
 
         self.assertEqual(context.exception.status_code, 422)
@@ -240,8 +279,7 @@ class SalesApiTests(unittest.TestCase):
 
         with self.assertRaises(HTTPException) as context:
             get_sales_action_needed(
-                start_date=None,
-                end_date=None,
+                filters=SalesFilters(),
                 db=object(),
                 settings=SimpleNamespace(
                     low_aov_threshold=Decimal("50.00"),

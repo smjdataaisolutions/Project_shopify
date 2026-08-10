@@ -35,6 +35,22 @@ class SalesActionExportRow:
     refunded_date: datetime | None
 
 
+@dataclass(frozen=True)
+class SalesFilters:
+    start_date: date | None = None
+    end_date: date | None = None
+    sales_channels: tuple[str, ...] = ()
+    financial_statuses: tuple[str, ...] = ()
+    currency_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SalesFilterOptions:
+    sales_channels: tuple[str, ...]
+    financial_statuses: tuple[str, ...]
+    currency_codes: tuple[str, ...]
+
+
 class SalesRepository:
     """Database queries for sales analytics."""
 
@@ -43,13 +59,10 @@ class SalesRepository:
 
     def get_sales_metrics(
         self,
-        start_date: date | None = None,
-        end_date: date | None = None,
+        filters: SalesFilters = SalesFilters(),
     ) -> SalesMetrics:
         """Return SAL-001-compatible aggregates for an optional processed period."""
-        statement = self._with_date_filters(
-            self._sales_metrics_statement(), start_date, end_date
-        )
+        statement = self._apply_filters(self._sales_metrics_statement(), filters)
         row = self.db.execute(statement).one()
         return SalesMetrics(
             gross_sales=row.gross_sales,
@@ -64,6 +77,14 @@ class SalesRepository:
             currency_count=row.currency_count,
             refunded_orders=row.refunded_orders,
             cancelled_orders=row.cancelled_orders,
+        )
+
+    def get_filter_options(self) -> SalesFilterOptions:
+        """Return exact non-empty order dimensions stored in PostgreSQL."""
+        return SalesFilterOptions(
+            sales_channels=self._distinct_non_empty(Order.sales_channel),
+            financial_statuses=self._distinct_non_empty(Order.financial_status),
+            currency_codes=self._distinct_non_empty(Order.currency_code),
         )
 
     @staticmethod
@@ -94,8 +115,7 @@ class SalesRepository:
 
     def get_revenue_trend(
         self,
-        start_date: date | None,
-        end_date: date | None,
+        filters: SalesFilters,
     ) -> list[tuple[date, Decimal, str | None]]:
         """Return daily revenue aggregates ordered by the Shopify processed date."""
         period = func.date_trunc("day", Order.processed_at).cast(Date).label("period")
@@ -110,19 +130,16 @@ class SalesRepository:
             .order_by(period)
         )
 
-        statement = self._with_date_filters(statement, start_date, end_date)
+        statement = self._apply_filters(statement, filters)
 
         return list(self.db.execute(statement).all())
 
     def get_action_export_rows(
         self,
-        start_date: date | None,
-        end_date: date | None,
+        filters: SalesFilters,
     ) -> list[SalesActionExportRow]:
         """Return order and product rows contributing to the refund/cancel rule."""
-        statement = self._with_date_filters(
-            self._action_export_statement(), start_date, end_date
-        )
+        statement = self._apply_filters(self._action_export_statement(), filters)
 
         return [SalesActionExportRow(*row) for row in self.db.execute(statement).all()]
 
@@ -156,3 +173,28 @@ class SalesRepository:
         if end_date:
             statement = statement.where(Order.processed_at < end_date + timedelta(days=1))
         return statement
+
+    @classmethod
+    def _apply_filters(cls, statement, filters: SalesFilters):
+        statement = cls._with_date_filters(
+            statement, filters.start_date, filters.end_date
+        )
+        if filters.sales_channels:
+            statement = statement.where(Order.sales_channel.in_(filters.sales_channels))
+        if filters.financial_statuses:
+            statement = statement.where(
+                Order.financial_status.in_(filters.financial_statuses)
+            )
+        if filters.currency_codes:
+            statement = statement.where(Order.currency_code.in_(filters.currency_codes))
+        return statement
+
+    def _distinct_non_empty(self, column) -> tuple[str, ...]:
+        return tuple(
+            self.db.scalars(
+                select(column)
+                .where(column.is_not(None), func.btrim(column) != "")
+                .distinct()
+                .order_by(column)
+            ).all()
+        )

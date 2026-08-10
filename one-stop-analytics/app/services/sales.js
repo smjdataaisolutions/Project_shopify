@@ -1,11 +1,32 @@
 const SALES_SUMMARY_ENDPOINT = "/api/sales/summary";
 const REVENUE_TREND_ENDPOINT = "/api/sales/revenue/trend";
 const SALES_ACTION_NEEDED_ENDPOINT = "/api/sales/action-needed";
+const SALES_FILTER_OPTIONS_ENDPOINT = "/api/sales/filter-options";
 
-export async function fetchSalesSummary() {
-  const response = await fetch(SALES_SUMMARY_ENDPOINT, {
-    headers: { Accept: "application/json" },
+function withSalesFilters(endpoint, filters = {}, extraParameters = {}) {
+  const parameters = new URLSearchParams(extraParameters);
+  if (filters.startDate) parameters.set("start_date", filters.startDate);
+  if (filters.endDate) parameters.set("end_date", filters.endDate);
+  filters.salesChannels?.forEach((channel) => {
+    parameters.append("sales_channel", channel);
   });
+  filters.orderStatuses?.forEach((status) => {
+    parameters.append("financial_status", status);
+  });
+  filters.currencies?.forEach((currency) => {
+    parameters.append("currency", currency);
+  });
+  const query = parameters.toString();
+  return query ? `${endpoint}?${query}` : endpoint;
+}
+
+export async function fetchSalesSummary(filters) {
+  const response = await fetch(
+    withSalesFilters(SALES_SUMMARY_ENDPOINT, filters),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Sales summary request failed (${response.status}).`);
@@ -14,14 +35,25 @@ export async function fetchSalesSummary() {
   return response.json();
 }
 
-export async function fetchRevenueTrend({ startDate, endDate } = {}) {
-  const parameters = new URLSearchParams({ interval: "daily" });
-  if (startDate) parameters.set("start_date", startDate);
-  if (endDate) parameters.set("end_date", endDate);
-
-  const response = await fetch(`${REVENUE_TREND_ENDPOINT}?${parameters}`, {
+export async function fetchSalesFilterOptions() {
+  const response = await fetch(SALES_FILTER_OPTIONS_ENDPOINT, {
     headers: { Accept: "application/json" },
   });
+  if (!response.ok) {
+    throw new Error(
+      `Sales filter options request failed (${response.status}).`,
+    );
+  }
+  return response.json();
+}
+
+export async function fetchRevenueTrend(filters) {
+  const response = await fetch(
+    withSalesFilters(REVENUE_TREND_ENDPOINT, filters, { interval: "daily" }),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Revenue trend request failed (${response.status}).`);
@@ -30,18 +62,13 @@ export async function fetchRevenueTrend({ startDate, endDate } = {}) {
   return response.json();
 }
 
-export async function fetchSalesActionNeeded({ startDate, endDate } = {}) {
-  const parameters = new URLSearchParams();
-  if (startDate) parameters.set("start_date", startDate);
-  if (endDate) parameters.set("end_date", endDate);
-  const query = parameters.toString();
-  const endpoint = query
-    ? `${SALES_ACTION_NEEDED_ENDPOINT}?${query}`
-    : SALES_ACTION_NEEDED_ENDPOINT;
-
-  const response = await fetch(endpoint, {
-    headers: { Accept: "application/json" },
-  });
+export async function fetchSalesActionNeeded(filters) {
+  const response = await fetch(
+    withSalesFilters(SALES_ACTION_NEEDED_ENDPOINT, filters),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Sales action needed request failed (${response.status}).`);
@@ -50,18 +77,11 @@ export async function fetchSalesActionNeeded({ startDate, endDate } = {}) {
   return response.json();
 }
 
-export async function downloadSalesActionNeededCsv({
-  actionId,
-  startDate,
-  endDate,
-}) {
-  const parameters = new URLSearchParams();
-  if (startDate) parameters.set("start_date", startDate);
-  if (endDate) parameters.set("end_date", endDate);
-  const query = parameters.toString();
-  const endpoint = `/api/sales/action-needed/${encodeURIComponent(actionId)}/download${
-    query ? `?${query}` : ""
-  }`;
+export async function downloadSalesActionNeededCsv({ actionId, filters }) {
+  const endpoint = withSalesFilters(
+    `/api/sales/action-needed/${encodeURIComponent(actionId)}/download`,
+    filters,
+  );
 
   const response = await fetch(endpoint, {
     headers: { Accept: "text/csv" },
