@@ -1,12 +1,32 @@
 from datetime import date
+from pathlib import Path
 import unittest
 
 from sqlalchemy.dialects import postgresql
 
+from app.db.models import Order
 from app.repositories.sales_repository import SalesRepository
 
 
 class SalesRepositoryTests(unittest.TestCase):
+    def test_order_model_exposes_postgresql_sales_channel(self):
+        self.assertEqual(Order.sales_channel.name, "sales_channel")
+        self.assertTrue(Order.sales_channel.nullable)
+
+    def test_shopify_sync_maps_source_name_to_sales_channel(self):
+        project_root = Path(__file__).resolve().parents[1]
+        sync_source = (project_root / "job_conf" / "shpfy_postgre.py").read_text(
+            encoding="utf-8"
+        )
+        ddl_source = (project_root / "ddl" / "ddl.sql").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("sourceName", sync_source)
+        self.assertIn('"sales_channel": order.get("sourceName")', sync_source)
+        self.assertIn("sales_channel TEXT", sync_source)
+        self.assertIn("sales_channel TEXT", ddl_source)
+
     def test_sales_metrics_reuses_sal_001_formulas_and_processed_date_filters(self):
         repository = SalesRepository(db=object())
         statement = repository._with_date_filters(

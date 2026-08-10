@@ -98,11 +98,13 @@ function CollapsibleFilterSection({ title, children, defaultExpanded = false }) 
 function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
   if (!options.length) return null;
 
-  const toggle = (value) => {
+  const toggle = (values) => {
+    const allSelected = values.every((value) => selectedValues.includes(value));
+    const optionValues = new Set(values);
     onChange(
-      selectedValues.includes(value)
-        ? selectedValues.filter((item) => item !== value)
-        : [...selectedValues, value],
+      allSelected
+        ? selectedValues.filter((item) => !optionValues.has(item))
+        : [...new Set([...selectedValues, ...values])],
     );
   };
 
@@ -112,12 +114,13 @@ function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
         {options.map((option) => {
           const value = typeof option === "string" ? option : option.id;
           const label = typeof option === "string" ? option : option.name;
+          const values = typeof option === "string" ? [option] : option.values;
           return (
             <FilterOption
               key={value}
               label={label}
-              selected={selectedValues.includes(value)}
-              onClick={() => toggle(value)}
+              selected={values.every((item) => selectedValues.includes(item))}
+              onClick={() => toggle(values)}
             />
           );
         })}
@@ -166,6 +169,7 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
       endDate: "",
       orderStatuses: [],
       fulfillmentStatuses: [],
+      salesChannels: [],
     });
   };
 
@@ -259,6 +263,14 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
 
           {options ? (
             <>
+              <MultiSelectGroup
+                heading="Sales channel"
+                options={options.sales_channels || []}
+                selectedValues={filters.salesChannels}
+                onChange={(salesChannels) =>
+                  onChange({ ...filters, salesChannels })
+                }
+              />
               <MultiSelectGroup
                 heading="Order status"
                 options={options.order_statuses}

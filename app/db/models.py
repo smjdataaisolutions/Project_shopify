@@ -47,6 +47,7 @@ class Order(Base):
     currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
     financial_status: Mapped[str | None] = mapped_column(String, nullable=True)
     fulfillment_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    sales_channel: Mapped[str | None] = mapped_column(String, nullable=True)
     subtotal_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_discount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_shipping: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)

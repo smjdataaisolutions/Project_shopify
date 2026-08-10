@@ -12,6 +12,7 @@ from app.schemas.dashboard import (
     InventoryHealthHighlight,
     InventoryHighlightMetrics,
     OverviewFilterOptionsResponse,
+    SalesChannelFilterOption,
     SalesHighlightMetrics,
     SalesPerformanceHighlight,
     TopProductHighlightMetrics,
@@ -21,6 +22,38 @@ from app.schemas.dashboard import (
 
 MAX_ACTIONS = 5
 ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
+SALES_CHANNEL_PRESENTATION = (
+    (
+        "online_store",
+        "Online Store",
+        "Order placed through the Shopify storefront",
+    ),
+    (
+        "point_of_sale",
+        "Point of Sale",
+        "Order created through Shopify POS",
+    ),
+    (
+        "shop",
+        "Shop",
+        "Order originating from the Shop channel/app",
+    ),
+    (
+        "draft_orders",
+        "Draft Orders",
+        "Order created from a draft order",
+    ),
+    (
+        "facebook_instagram",
+        "Facebook & Instagram",
+        "Order associated with Meta sales channels",
+    ),
+    (
+        "other_app_specific_channels",
+        "Other/app-specific channels",
+        "Orders created through installed apps or other integrations",
+    ),
+)
 
 
 def build_overview_filters(
@@ -28,6 +61,7 @@ def build_overview_filters(
     end_date: date | None,
     financial_statuses: list[str] | None,
     fulfillment_statuses: list[str] | None,
+    sales_channels: list[str] | None = None,
 ) -> OverviewFilters:
     if start_date and end_date and start_date > end_date:
         raise ValueError("start_date must be on or before end_date")
@@ -36,7 +70,47 @@ def build_overview_filters(
         end_date=end_date,
         financial_statuses=tuple(dict.fromkeys(financial_statuses or [])),
         fulfillment_statuses=tuple(dict.fromkeys(fulfillment_statuses or [])),
+        sales_channels=tuple(dict.fromkeys(sales_channels or [])),
     )
+
+
+def categorize_sales_channel(source_name: str) -> str:
+    """Map a Shopify sourceName to a stable merchant-facing category ID."""
+    normalized = source_name.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"web", "online_store", "shopify_online_store"}:
+        return "online_store"
+    if normalized in {"pos", "shopify_pos"}:
+        return "point_of_sale"
+    if normalized in {"shop", "shop_app"}:
+        return "shop"
+    if normalized in {"shopify_draft_order", "draft_order", "draft_orders"}:
+        return "draft_orders"
+    if any(token in normalized for token in ("facebook", "instagram", "meta")):
+        return "facebook_instagram"
+    return "other_app_specific_channels"
+
+
+def _build_sales_channel_options(
+    source_names: tuple[str, ...],
+) -> list[SalesChannelFilterOption]:
+    grouped = {
+        category_id: []
+        for category_id, _name, _description in SALES_CHANNEL_PRESENTATION
+    }
+    for source_name in source_names:
+        category_id = categorize_sales_channel(source_name)
+        grouped[category_id].append(source_name)
+
+    return [
+        SalesChannelFilterOption(
+            id=category_id,
+            name=name,
+            description=description,
+            values=grouped[category_id],
+        )
+        for category_id, name, description in SALES_CHANNEL_PRESENTATION
+        if grouped[category_id]
+    ]
 
 
 class DashboardService:
@@ -75,6 +149,7 @@ class DashboardService:
         return OverviewFilterOptionsResponse(
             order_statuses=list(options.financial_statuses),
             fulfillment_statuses=list(options.fulfillment_statuses),
+            sales_channels=_build_sales_channel_options(options.sales_channels),
         )
 
     def get_business_highlights(
