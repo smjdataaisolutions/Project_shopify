@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS orders (
   currency_code TEXT,
   financial_status TEXT,
   fulfillment_status TEXT,
+  sales_channel TEXT,
   subtotal_price NUMERIC,
   total_discount NUMERIC,
   total_shipping NUMERIC,
@@ -85,6 +86,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_refunded NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS sales_channel TEXT;
 
 CREATE TABLE IF NOT EXISTS order_line_items (
   id TEXT PRIMARY KEY,

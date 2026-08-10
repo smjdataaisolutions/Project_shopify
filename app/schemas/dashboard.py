@@ -14,9 +14,24 @@ class DashboardSummary(BaseModel):
     average_order_value: float = Field(ge=0)
 
 
+class SalesChannelFilterOption(BaseModel):
+    id: Literal[
+        "online_store",
+        "point_of_sale",
+        "shop",
+        "draft_orders",
+        "facebook_instagram",
+        "other_app_specific_channels",
+    ]
+    name: str
+    description: str
+    values: list[str]
+
+
 class OverviewFilterOptionsResponse(BaseModel):
     order_statuses: list[str]
     fulfillment_statuses: list[str]
+    sales_channels: list[SalesChannelFilterOption]
 
 
 class SalesHighlightMetrics(BaseModel):

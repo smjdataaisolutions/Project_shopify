@@ -31,6 +31,7 @@ def get_overview_filters(
     end_date: date | None = Query(default=None),
     financial_status: Annotated[list[str] | None, Query()] = None,
     fulfillment_status: Annotated[list[str] | None, Query()] = None,
+    sales_channel: Annotated[list[str] | None, Query()] = None,
 ) -> OverviewFilters:
     try:
         return build_overview_filters(
@@ -38,6 +39,7 @@ def get_overview_filters(
             end_date,
             financial_status,
             fulfillment_status,
+            sales_channel,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

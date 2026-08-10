@@ -83,6 +83,7 @@ query Orders($first: Int!, $after: String) {
       currencyCode
       displayFinancialStatus
       displayFulfillmentStatus
+      sourceName
       subtotalPriceSet { shopMoney { amount } }
       totalDiscountsSet { shopMoney { amount } }
       totalShippingPriceSet { shopMoney { amount } }
@@ -139,6 +140,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY, name TEXT, created_at TIMESTAMPTZ, processed_at TIMESTAMPTZ,
   cancelled_at TIMESTAMPTZ, refunded_at TIMESTAMPTZ,
   currency_code TEXT, financial_status TEXT, fulfillment_status TEXT,
+  sales_channel TEXT,
   subtotal_price NUMERIC, total_discount NUMERIC, total_shipping NUMERIC,
   total_tax NUMERIC, total_price NUMERIC, total_refunded NUMERIC,
   refund_reason TEXT
@@ -153,6 +155,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_refunded NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS sales_channel TEXT;
 
 CREATE TABLE IF NOT EXISTS order_line_items (
   id TEXT PRIMARY KEY, order_id TEXT, product_id TEXT, variant_id TEXT,
@@ -271,6 +274,7 @@ def sync_orders(cursor):
             "currency_code": order.get("currencyCode"),
             "financial_status": order.get("displayFinancialStatus"),
             "fulfillment_status": order.get("displayFulfillmentStatus"),
+            "sales_channel": order.get("sourceName"),
             "subtotal_price": shop_money_amount("subtotalPriceSet"),
             "total_discount": shop_money_amount("totalDiscountsSet"),
             "total_shipping": shop_money_amount("totalShippingPriceSet"),

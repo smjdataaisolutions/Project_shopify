@@ -14,6 +14,9 @@ function withOverviewFilters(endpoint, filters = {}) {
   filters.fulfillmentStatuses?.forEach((status) => {
     params.append("fulfillment_status", status);
   });
+  filters.salesChannels?.forEach((channel) => {
+    params.append("sales_channel", channel);
+  });
   const query = params.toString();
   return query ? `${endpoint}?${query}` : endpoint;
 }

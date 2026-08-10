@@ -45,6 +45,7 @@ export default function StorePerformanceOverview() {
     endDate: "",
     orderStatuses: [],
     fulfillmentStatuses: [],
+    salesChannels: [],
   });
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState(null);

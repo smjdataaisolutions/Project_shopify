@@ -18,6 +18,7 @@ class OverviewFilters:
     end_date: date | None = None
     financial_statuses: tuple[str, ...] = ()
     fulfillment_statuses: tuple[str, ...] = ()
+    sales_channels: tuple[str, ...] = ()
 
     @property
     def has_order_filters(self) -> bool:
@@ -26,6 +27,7 @@ class OverviewFilters:
             or self.end_date
             or self.financial_statuses
             or self.fulfillment_statuses
+            or self.sales_channels
         )
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ class TopProductMetrics:
 class OverviewFilterOptions:
     financial_statuses: tuple[str, ...]
     fulfillment_statuses: tuple[str, ...]
+    sales_channels: tuple[str, ...]
 
 
 class DashboardRepository:
@@ -99,9 +102,21 @@ class DashboardRepository:
                 .order_by(Order.fulfillment_status)
             ).all()
         )
+        sales_channels = tuple(
+            self.db.scalars(
+                select(Order.sales_channel)
+                .where(
+                    Order.sales_channel.is_not(None),
+                    func.btrim(Order.sales_channel) != "",
+                )
+                .distinct()
+                .order_by(Order.sales_channel)
+            ).all()
+        )
         return OverviewFilterOptions(
             financial_statuses=financial_statuses,
             fulfillment_statuses=fulfillment_statuses,
+            sales_channels=sales_channels,
         )
 
     def get_dashboard_summary(
@@ -274,6 +289,8 @@ class DashboardRepository:
             statement = statement.where(
                 Order.fulfillment_status.in_(filters.fulfillment_statuses)
             )
+        if filters.sales_channels:
+            statement = statement.where(Order.sales_channel.in_(filters.sales_channels))
         return statement
 
     def _inventory_rows(self):
