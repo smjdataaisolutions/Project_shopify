@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     app_name: str = "Shopify Analytics API"
     low_stock_threshold: int = 10
     low_aov_threshold: Decimal = Field(default=Decimal("50.00"), ge=0)
+    high_discount_rate_threshold: Decimal = Field(
+        default=Decimal("0.20"), ge=0, le=1
+    )
+    refund_rate_threshold: Decimal = Field(default=Decimal("0.10"), ge=0, le=1)
+    cancellation_rate_threshold: Decimal = Field(
+        default=Decimal("0.10"), ge=0, le=1
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

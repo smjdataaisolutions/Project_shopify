@@ -4,6 +4,30 @@
   gap: 1rem;
 }
 
+.card {
+  display: block;
+  height: 100%;
+}
+
+.cardContent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.actionFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+
+.downloadError {
+  margin-bottom: 0.75rem;
+}
+
 .cardHeader {
   display: flex;
   align-items: center;

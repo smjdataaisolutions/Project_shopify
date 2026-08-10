@@ -3,6 +3,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { KPICard } from "../components/dashboard/KPICard";
 import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import { RevenueTrend } from "../components/sales/RevenueTrend";
+import { SalesActionNeeded } from "../components/sales/SalesActionNeeded";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchSalesSummary } from "../services/sales";
 import { authenticate } from "../shopify.server";
@@ -89,6 +90,10 @@ export default function Sales() {
 
       <s-section heading="Revenue trend">
         <RevenueTrend />
+      </s-section>
+
+      <s-section heading="Action needed">
+        <SalesActionNeeded />
       </s-section>
 
     </s-page>

@@ -79,6 +79,7 @@ query Orders($first: Int!, $after: String) {
       name
       createdAt
       processedAt
+      cancelledAt
       currencyCode
       displayFinancialStatus
       displayFulfillmentStatus
@@ -87,6 +88,11 @@ query Orders($first: Int!, $after: String) {
       totalShippingPriceSet { shopMoney { amount } }
       totalTaxSet { shopMoney { amount } }
       totalPriceSet { shopMoney { amount } }
+      totalRefundedSet { shopMoney { amount } }
+      refunds {
+        createdAt
+        note
+      }
       lineItems(first: 250) {
         nodes {
           id
@@ -131,9 +137,11 @@ CREATE TABLE IF NOT EXISTS inventory (
 
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY, name TEXT, created_at TIMESTAMPTZ, processed_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ, refunded_at TIMESTAMPTZ,
   currency_code TEXT, financial_status TEXT, fulfillment_status TEXT,
   subtotal_price NUMERIC, total_discount NUMERIC, total_shipping NUMERIC,
-  total_tax NUMERIC, total_price NUMERIC
+  total_tax NUMERIC, total_price NUMERIC, total_refunded NUMERIC,
+  refund_reason TEXT
 );
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
@@ -141,6 +149,10 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_price NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_refunded NUMERIC;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS order_line_items (
   id TEXT PRIMARY KEY, order_id TEXT, product_id TEXT, variant_id TEXT,
@@ -241,9 +253,21 @@ def sync_orders(cursor):
             money = (order.get(field_name) or {}).get("shopMoney") or {}
             return Decimal(money["amount"]) if money.get("amount") is not None else None
 
+        refunds = order.get("refunds") or []
+        refund_dates = [
+            refund["createdAt"] for refund in refunds if refund.get("createdAt")
+        ]
+        refund_notes = list(dict.fromkeys(
+            refund["note"].strip()
+            for refund in refunds
+            if refund.get("note") and refund["note"].strip()
+        ))
+
         upsert(cursor, "orders", {
             "id": order["id"], "name": order.get("name"),
             "created_at": order.get("createdAt"), "processed_at": order.get("processedAt"),
+            "cancelled_at": order.get("cancelledAt"),
+            "refunded_at": max(refund_dates) if refund_dates else None,
             "currency_code": order.get("currencyCode"),
             "financial_status": order.get("displayFinancialStatus"),
             "fulfillment_status": order.get("displayFulfillmentStatus"),
@@ -252,6 +276,8 @@ def sync_orders(cursor):
             "total_shipping": shop_money_amount("totalShippingPriceSet"),
             "total_tax": shop_money_amount("totalTaxSet"),
             "total_price": shop_money_amount("totalPriceSet"),
+            "total_refunded": shop_money_amount("totalRefundedSet"),
+            "refund_reason": " | ".join(refund_notes) or None,
         }, ["id"])
 
         for line in order["lineItems"]["nodes"]:
