@@ -1,53 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useId, useState } from "react";
 import { fetchOverviewFilterOptions } from "../../services/dashboard";
+import { DateRangePicker } from "../filters/DateRangePicker";
 import styles from "./overviewFilters.module.css";
-
-const DATE_PRESETS = [
-  ["today", "Today"],
-  ["yesterday", "Yesterday"],
-  ["last_7_days", "Last 7 days"],
-  ["last_30_days", "Last 30 days"],
-  ["last_90_days", "Last 90 days"],
-  ["this_month", "This month"],
-  ["previous_month", "Previous month"],
-  ["this_year", "This year"],
-  ["custom", "Custom range"],
-];
-
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getPresetRange(preset) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  const end = new Date(today);
-
-  if (preset === "yesterday") {
-    start.setDate(start.getDate() - 1);
-    end.setDate(end.getDate() - 1);
-  } else if (preset === "last_7_days") {
-    start.setDate(start.getDate() - 6);
-  } else if (preset === "last_30_days") {
-    start.setDate(start.getDate() - 29);
-  } else if (preset === "last_90_days") {
-    start.setDate(start.getDate() - 89);
-  } else if (preset === "this_month") {
-    start.setDate(1);
-  } else if (preset === "previous_month") {
-    start.setMonth(start.getMonth() - 1, 1);
-    end.setDate(0);
-  } else if (preset === "this_year") {
-    start.setMonth(0, 1);
-  }
-
-  return { startDate: formatDate(start), endDate: formatDate(end) };
-}
 
 function FilterOption({ label, selected, onClick }) {
   return (
@@ -134,9 +89,6 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
   const [datePreset, setDatePreset] = useState(null);
-  const [draftDates, setDraftDates] = useState({ startDate: "", endDate: "" });
-  const dateError = draftDates.startDate && draftDates.endDate
-    && draftDates.startDate > draftDates.endDate;
 
   useEffect(() => {
     let active = true;
@@ -151,19 +103,8 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
     return () => { active = false; };
   }, [requestVersion]);
 
-  const selectDatePreset = (preset) => {
-    setDatePreset(preset);
-    if (preset !== "custom") setDraftDates(getPresetRange(preset));
-  };
-
-  const applyDates = () => {
-    if (!datePreset || dateError) return;
-    onChange({ ...filters, ...draftDates });
-  };
-
   const clearAll = () => {
     setDatePreset(null);
-    setDraftDates({ startDate: "", endDate: "" });
     onChange({
       startDate: "",
       endDate: "",
@@ -196,53 +137,17 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
           </div>
 
           <CollapsibleFilterSection title="Date range">
-            <div className={styles.options}>
-              {DATE_PRESETS.map(([value, label]) => (
-                <FilterOption
-                  key={value}
-                  label={label}
-                  selected={datePreset === value}
-                  onClick={() => selectDatePreset(value)}
-                />
-              ))}
-            </div>
-            {datePreset === "custom" ? (
-              <div className={styles.dateFields}>
-                <s-date-field
-                  label="Start date"
-                  value={draftDates.startDate}
-                  onChange={(event) => setDraftDates((dates) => ({
-                    ...dates,
-                    startDate: event.currentTarget.value,
-                  }))}
-                />
-                <s-date-field
-                  label="End date"
-                  value={draftDates.endDate}
-                  onChange={(event) => setDraftDates((dates) => ({
-                    ...dates,
-                    endDate: event.currentTarget.value,
-                  }))}
-                />
-              </div>
-            ) : null}
-            {dateError ? (
-              <s-text tone="critical">
-                Start date must be on or before end date.
-              </s-text>
-            ) : null}
-            <s-button
-              variant="primary"
-              disabled={
-                !datePreset
-                || !draftDates.startDate
-                || !draftDates.endDate
-                || dateError
-              }
-              onClick={applyDates}
-            >
-              Apply
-            </s-button>
+            <DateRangePicker
+              appliedRange={{
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+              }}
+              appliedPreset={datePreset}
+              onApply={({ range, preset }) => {
+                setDatePreset(preset);
+                onChange({ ...filters, ...range });
+              }}
+            />
           </CollapsibleFilterSection>
 
           {error ? (

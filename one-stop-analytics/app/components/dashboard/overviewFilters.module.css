@@ -120,8 +120,3 @@
   flex: 0 0 1rem;
   text-align: center;
 }
-
-.dateFields {
-  display: grid;
-  gap: 0.5rem;
-}
