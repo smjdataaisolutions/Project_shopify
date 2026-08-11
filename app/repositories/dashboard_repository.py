@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import String, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -61,6 +61,27 @@ class InventoryAffectedProduct:
     product_title: str | None
     is_out_of_stock: bool
     low_stock_quantity: int | None
+
+
+@dataclass(frozen=True)
+class InventoryActionExportRow:
+    product_id: str
+    product_name: str | None
+    variant_title: str | None
+    sku: str | None
+    inventory_quantity: int | None
+    location_name: str | None
+    units_sold: int
+
+
+@dataclass(frozen=True)
+class SalesActionExportRow:
+    order_id: str
+    product_name: str | None
+    units: int
+    gross_sales: Decimal
+    discount_amount: Decimal
+    net_sales: Decimal
 
 
 @dataclass(frozen=True)
@@ -230,6 +251,92 @@ class DashboardRepository:
                 low_stock_quantity=row.low_stock_quantity,
             )
             for row in self.db.execute(statement).all()
+        ]
+
+    def get_inventory_action_export_rows(
+        self,
+        action_id: str,
+        low_stock_threshold: int,
+        filters: OverviewFilters = OverviewFilters(),
+    ) -> list[InventoryActionExportRow]:
+        """Return only variants affected by one inventory action."""
+        if action_id == "inventory_out_of_stock":
+            inventory_condition = ProductVariant.inventory_quantity == 0
+        elif action_id == "inventory_low_stock":
+            inventory_condition = ProductVariant.inventory_quantity.between(
+                1, low_stock_threshold
+            )
+        else:
+            raise LookupError(f"Unknown inventory action '{action_id}'.")
+
+        units_sold = (
+            select(
+                OrderLineItem.variant_id.label("variant_id"),
+                func.coalesce(func.sum(OrderLineItem.quantity), 0).label("units_sold"),
+            )
+            .select_from(OrderLineItem)
+            .join(Order, Order.id == OrderLineItem.order_id)
+            .where(OrderLineItem.variant_id.is_not(None))
+            .group_by(OrderLineItem.variant_id)
+        )
+        units_sold = self._apply_order_filters(units_sold, filters).subquery()
+        statement = (
+            select(
+                ProductVariant.product_id,
+                Product.title.label("product_name"),
+                func.cast(None, String).label("variant_title"),
+                func.cast(None, String).label("sku"),
+                ProductVariant.inventory_quantity,
+                func.cast(None, String).label("location_name"),
+                func.coalesce(units_sold.c.units_sold, 0).label("units_sold"),
+            )
+            .select_from(ProductVariant)
+            .join(Product, Product.id == ProductVariant.product_id, isouter=True)
+            .join(
+                units_sold,
+                units_sold.c.variant_id == ProductVariant.id,
+                isouter=True,
+            )
+            .where(
+                ProductVariant.product_id.is_not(None),
+                inventory_condition,
+            )
+            .order_by(ProductVariant.product_id.asc(), ProductVariant.id.asc())
+        )
+        return [
+            InventoryActionExportRow(*row)
+            for row in self.db.execute(statement).all()
+        ]
+
+    def get_sales_action_export_rows(
+        self,
+        filters: OverviewFilters = OverviewFilters(),
+    ) -> list[SalesActionExportRow]:
+        """Return line-item aggregates contributing to an overview sales rule."""
+        gross_sales = func.coalesce(
+            func.sum(OrderLineItem.unit_price * OrderLineItem.quantity), 0
+        ).label("gross_sales")
+        units = func.coalesce(func.sum(OrderLineItem.quantity), 0).label("units")
+        discount_amount = func.coalesce(func.max(Order.total_discount), 0).label(
+            "discount_amount"
+        )
+        statement = (
+            select(
+                Order.id.label("order_id"),
+                OrderLineItem.title.label("product_name"),
+                units,
+                gross_sales,
+                discount_amount,
+                (gross_sales - discount_amount).label("net_sales"),
+            )
+            .select_from(OrderLineItem)
+            .join(Order, Order.id == OrderLineItem.order_id)
+            .group_by(Order.id, OrderLineItem.title)
+            .order_by(Order.id.asc(), OrderLineItem.title.asc())
+        )
+        statement = self._apply_order_filters(statement, filters)
+        return [
+            SalesActionExportRow(*row) for row in self.db.execute(statement).all()
         ]
 
     def get_top_selling_product(

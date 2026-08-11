@@ -2,7 +2,7 @@ from datetime import date
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,15 @@ def _dashboard_service(db: Session) -> DashboardService:
     return DashboardService(
         DashboardRepository(db),
         low_stock_threshold=get_settings().low_stock_threshold,
+    )
+
+
+def _action_needed_service(db: Session) -> ActionNeededService:
+    settings = get_settings()
+    return ActionNeededService(
+        DashboardRepository(db),
+        low_aov_threshold=settings.low_aov_threshold,
+        low_stock_threshold=settings.low_stock_threshold,
     )
 
 
@@ -115,16 +124,36 @@ def get_action_needed(
 ) -> ActionNeededResponse:
     """Return prioritized actions for the selected filters."""
     try:
-        settings = get_settings()
-        service = ActionNeededService(
-            DashboardRepository(db),
-            low_aov_threshold=settings.low_aov_threshold,
-            low_stock_threshold=settings.low_stock_threshold,
-        )
-        return service.get_actions(filters)
+        return _action_needed_service(db).get_actions(filters)
     except SQLAlchemyError as error:
         logger.exception("Unable to retrieve overview actions")
         raise HTTPException(
             status_code=500,
             detail="Unable to retrieve action needed recommendations.",
+        ) from error
+
+
+@router.get("/analytics/overview/action-needed/{action_id}/download")
+def download_action_needed_records(
+    action_id: str,
+    filters: OverviewFilters = Depends(get_overview_filters),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Download only the records contributing to one overview action."""
+    try:
+        export = _action_needed_service(db).get_action_export(action_id, filters)
+        return Response(
+            content=export.content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{export.filename}"'
+            },
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except SQLAlchemyError as error:
+        logger.exception("Unable to export overview action needed records")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to export action needed records.",
         ) from error

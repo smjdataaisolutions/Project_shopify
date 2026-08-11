@@ -1,5 +1,8 @@
+import csv
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+import io
 
 from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
@@ -23,6 +26,42 @@ from app.services.sales_channel_service import group_sales_channels
 
 MAX_ACTIONS = 5
 ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
+INVENTORY_CSV_COLUMNS = (
+    "product_id", "affected_product_name", "variant_title", "sku",
+    "inventory_quantity", "location_name", "units_sold", "issue_type",
+    "issue_value",
+)
+ORDER_CSV_COLUMNS = (
+    "order_id", "order_number", "product_name", "financial_status",
+    "fulfillment_status", "order_amount", "issue_type", "issue_value",
+)
+SALES_CSV_COLUMNS = (
+    "order_id", "product_name", "units", "gross_sales", "discount_amount",
+    "net_sales", "issue_type", "issue_value",
+)
+ACTION_METADATA = {
+    "inventory_out_of_stock": {
+        "category": "inventory", "action_label": "Go to Inventory",
+        "action_url": "/app/inventory", "filename": "out_of_stock_products.csv",
+        "columns": INVENTORY_CSV_COLUMNS,
+    },
+    "inventory_low_stock": {
+        "category": "inventory", "action_label": "Go to Inventory",
+        "action_url": "/app/inventory", "filename": "low_stock_products.csv",
+        "columns": INVENTORY_CSV_COLUMNS,
+    },
+    "sales_no_orders": {
+        "category": "orders", "action_label": "Go to Orders",
+        "action_url": "/app/orders", "filename": "order_issues.csv",
+        "columns": ORDER_CSV_COLUMNS,
+    },
+    "sales_low_average_order_value": {
+        "category": "sales", "action_label": "Go to Sales",
+        "action_url": "/app/sales",
+        "filename": "low_average_order_value_sales.csv",
+        "columns": SALES_CSV_COLUMNS,
+    },
+}
 SALES_CHANNEL_DESCRIPTIONS = {
     "online_store": "Order placed through the Shopify storefront",
     "point_of_sale": "Order created through Shopify POS",
@@ -33,6 +72,12 @@ SALES_CHANNEL_DESCRIPTIONS = {
         "Orders created through installed apps or other integrations"
     ),
 }
+
+
+@dataclass(frozen=True)
+class OverviewActionCsvExport:
+    filename: str
+    content: str
 
 
 def build_overview_filters(
@@ -249,10 +294,9 @@ class ActionNeededService:
         if inventory.out_of_stock_count > 0:
             count = inventory.out_of_stock_count
             actions.append(
-                ActionNeededItem(
+                self._action(
                     id="inventory_out_of_stock",
                     priority="critical",
-                    category="inventory",
                     title="Products are out of stock",
                     message=(
                         f"{_format_count(count, 'product')} "
@@ -266,10 +310,9 @@ class ActionNeededService:
         if inventory.low_stock_count > 0:
             count = inventory.low_stock_count
             actions.append(
-                ActionNeededItem(
+                self._action(
                     id="inventory_low_stock",
                     priority="warning",
-                    category="inventory",
                     title="Inventory is running low",
                     message=(
                         f"{_format_count(count, 'product')} "
@@ -284,10 +327,9 @@ class ActionNeededService:
         if sales.total_orders == 0:
             filtered_orders = filters.has_order_filters
             actions.append(
-                ActionNeededItem(
+                self._action(
                     id="sales_no_orders",
                     priority="warning",
-                    category="sales",
                     title=(
                         "No orders match the selected filters"
                         if filtered_orders
@@ -307,10 +349,9 @@ class ActionNeededService:
             average_order_value = sales.total_revenue / sales.total_orders
             if average_order_value < self.low_aov_threshold:
                 actions.append(
-                    ActionNeededItem(
+                    self._action(
                         id="sales_low_average_order_value",
                         priority="recommendation",
-                        category="sales",
                         title="Average order value is low",
                         message=(
                             "Average order value is "
@@ -326,6 +367,85 @@ class ActionNeededService:
 
         actions.sort(key=lambda action: ACTION_PRIORITY_ORDER[action.priority])
         return ActionNeededResponse(actions=actions[:MAX_ACTIONS])
+
+    def get_action_export(
+        self,
+        action_id: str,
+        filters: OverviewFilters = OverviewFilters(),
+    ) -> OverviewActionCsvExport:
+        """Build the affected-record CSV for one supported overview action."""
+        metadata = ACTION_METADATA.get(action_id)
+        if metadata is None:
+            raise LookupError(f"CSV export is not available for action '{action_id}'.")
+
+        if action_id in {"inventory_out_of_stock", "inventory_low_stock"}:
+            source_rows = self.repository.get_inventory_action_export_rows(
+                action_id, self.low_stock_threshold, filters
+            )
+            records = [
+                {
+                    "product_id": self._csv_safe(row.product_id),
+                    "affected_product_name": self._csv_safe(row.product_name),
+                    "variant_title": self._csv_safe(row.variant_title),
+                    "sku": self._csv_safe(row.sku),
+                    "inventory_quantity": row.inventory_quantity,
+                    "location_name": self._csv_safe(row.location_name),
+                    "units_sold": row.units_sold,
+                    "issue_type": action_id,
+                    "issue_value": row.inventory_quantity,
+                }
+                for row in source_rows
+            ]
+        elif action_id == "sales_low_average_order_value":
+            source_rows = self.repository.get_sales_action_export_rows(filters)
+            records = [
+                {
+                    "order_id": self._csv_safe(row.order_id),
+                    "product_name": self._csv_safe(row.product_name),
+                    "units": row.units,
+                    "gross_sales": self._decimal(row.gross_sales),
+                    "discount_amount": self._decimal(row.discount_amount),
+                    "net_sales": self._decimal(row.net_sales),
+                    "issue_type": action_id,
+                    "issue_value": self._decimal(self.low_aov_threshold),
+                }
+                for row in source_rows
+            ]
+        else:
+            records = []
+
+        output = io.StringIO(newline="")
+        writer = csv.DictWriter(
+            output, fieldnames=metadata["columns"], lineterminator="\r\n"
+        )
+        writer.writeheader()
+        writer.writerows(records)
+        return OverviewActionCsvExport(
+            filename=metadata["filename"], content=output.getvalue()
+        )
+
+    @staticmethod
+    def _action(*, id: str, **values) -> ActionNeededItem:
+        metadata = ACTION_METADATA[id]
+        return ActionNeededItem(
+            id=id,
+            category=metadata["category"],
+            action_label=metadata["action_label"],
+            action_url=metadata["action_url"],
+            download_available=True,
+            **values,
+        )
+
+    @staticmethod
+    def _csv_safe(value: object | None) -> str:
+        text = "" if value is None else str(value)
+        if text.lstrip().startswith(("=", "+", "-", "@")):
+            return f"'{text}"
+        return text
+
+    @staticmethod
+    def _decimal(value: Decimal | None) -> str:
+        return format(value, "f") if value is not None else ""
 
 
 def _format_money(amount: Decimal, currency_code: str | None) -> str:

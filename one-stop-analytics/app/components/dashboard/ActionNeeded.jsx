@@ -1,6 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
-import { fetchActionNeeded } from "../../services/dashboard";
+import {
+  downloadActionNeededCsv,
+  fetchActionNeeded,
+} from "../../services/dashboard";
 import styles from "./actionNeeded.module.css";
 
 const PRIORITY_PRESENTATION = {
@@ -78,7 +81,12 @@ function ActionCard({ action, onDownload, downloadingActionId }) {
               />
             ) : null}
             {action.action_label && action.action_url ? (
-              <s-button href={action.action_url} target="_top">
+              <s-button
+                href={action.action_url}
+                target={
+                  action.action_url.startsWith("shopify://") ? "_top" : undefined
+                }
+              >
                 {action.action_label}
               </s-button>
             ) : null}
@@ -107,12 +115,15 @@ export function ActionCards({ actions, onDownload, downloadingActionId }) {
 export function ActionNeeded({ filters }) {
   const [actions, setActions] = useState(null);
   const [error, setError] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+  const [downloadingActionId, setDownloadingActionId] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
     setActions(null);
     setError(null);
+    setDownloadError(null);
 
     fetchActionNeeded(filters)
       .then((response) => active && setActions(response.actions))
@@ -128,6 +139,20 @@ export function ActionNeeded({ filters }) {
       active = false;
     };
   }, [filters, requestVersion]);
+
+  const downloadRecords = async (action) => {
+    setDownloadError(null);
+    setDownloadingActionId(action.id);
+    try {
+      await downloadActionNeededCsv({ actionId: action.id, filters });
+    } catch (requestError) {
+      setDownloadError(
+        requestError.message || "Unable to download the affected records.",
+      );
+    } finally {
+      setDownloadingActionId(null);
+    }
+  };
 
   if (error) {
     return (
@@ -161,5 +186,18 @@ export function ActionNeeded({ filters }) {
     );
   }
 
-  return <ActionCards actions={actions} />;
+  return (
+    <>
+      {downloadError ? (
+        <div className={styles.downloadError}>
+          <s-text tone="critical">{downloadError}</s-text>
+        </div>
+      ) : null}
+      <ActionCards
+        actions={actions}
+        onDownload={downloadRecords}
+        downloadingActionId={downloadingActionId}
+      />
+    </>
+  );
 }
