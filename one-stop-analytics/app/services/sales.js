@@ -1,3 +1,5 @@
+import { downloadCsv } from "./download";
+
 const SALES_SUMMARY_ENDPOINT = "/api/sales/summary";
 const REVENUE_TREND_ENDPOINT = "/api/sales/revenue/trend";
 const SALES_ACTION_NEEDED_ENDPOINT = "/api/sales/action-needed";
@@ -83,22 +85,5 @@ export async function downloadSalesActionNeededCsv({ actionId, filters }) {
     filters,
   );
 
-  const response = await fetch(endpoint, {
-    headers: { Accept: "text/csv" },
-  });
-  if (!response.ok) {
-    throw new Error(`CSV download request failed (${response.status}).`);
-  }
-
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-  const filename = filenameMatch?.[1] || "sales-action-needed-records.csv";
-  const objectUrl = URL.createObjectURL(await response.blob());
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(objectUrl);
+  await downloadCsv(endpoint, "sales-action-needed-records.csv");
 }

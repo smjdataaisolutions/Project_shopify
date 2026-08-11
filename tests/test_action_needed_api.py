@@ -4,7 +4,11 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.routers.dashboard import get_action_needed, router
+from app.routers.dashboard import (
+    download_action_needed_records,
+    get_action_needed,
+    router,
+)
 from app.repositories.dashboard_repository import OverviewFilters
 from app.schemas.dashboard import ActionNeededResponse
 
@@ -28,6 +32,9 @@ class ActionNeededApiTests(unittest.TestCase):
                         }
                     ],
                     "recommended_action": "Restock inventory immediately.",
+                    "action_label": "Go to Inventory",
+                    "action_url": "/app/inventory",
+                    "download_available": True,
                 }
             ]
         )
@@ -52,6 +59,9 @@ class ActionNeededApiTests(unittest.TestCase):
                             }
                         ],
                         "recommended_action": "Restock inventory immediately.",
+                        "action_label": "Go to Inventory",
+                        "action_url": "/app/inventory",
+                        "download_available": True,
                     }
                 ]
             },
@@ -65,6 +75,34 @@ class ActionNeededApiTests(unittest.TestCase):
         )
 
         self.assertEqual(route.response_model, ActionNeededResponse)
+        self.assertIn("GET", route.methods)
+
+    @patch("app.routers.dashboard.ActionNeededService.get_action_export")
+    def test_download_route_returns_csv_attachment(self, get_action_export):
+        from app.services.dashboard_service import OverviewActionCsvExport
+
+        get_action_export.return_value = OverviewActionCsvExport(
+            filename="low_stock_products.csv",
+            content="product_id,affected_product_name\r\np-1,Example\r\n",
+        )
+
+        response = download_action_needed_records(
+            "inventory_low_stock", filters=OverviewFilters(), db=object()
+        )
+
+        self.assertEqual(response.media_type, "text/csv")
+        self.assertEqual(
+            response.headers["content-disposition"],
+            'attachment; filename="low_stock_products.csv"',
+        )
+
+    def test_download_route_uses_documented_path(self):
+        route = next(
+            route
+            for route in router.routes
+            if route.path
+            == "/api/analytics/overview/action-needed/{action_id}/download"
+        )
         self.assertIn("GET", route.methods)
 
     @patch("app.routers.dashboard.DashboardRepository.get_sales_metrics")

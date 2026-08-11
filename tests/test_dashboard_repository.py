@@ -1,8 +1,10 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
 from sqlalchemy.dialects import postgresql
 
-from app.repositories.dashboard_repository import DashboardRepository
+from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 
 
 class CapturingResult:
@@ -56,6 +58,45 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertIn("count(distinct", sql.lower())
         self.assertIn("BETWEEN 1 AND 10", sql)
         self.assertIn("inventory_quantity = 0", sql)
+
+    def test_inventory_export_query_targets_only_requested_variants(self):
+        session = CapturingSession(
+            [("product-1", "Example", None, None, 0, None, 4)]
+        )
+
+        rows = DashboardRepository(session).get_inventory_action_export_rows(
+            "inventory_out_of_stock",
+            10,
+            OverviewFilters(start_date=date(2026, 8, 1)),
+        )
+        sql = str(
+            session.statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+
+        self.assertEqual(rows[0].product_id, "product-1")
+        self.assertIn("product_variants.inventory_quantity = 0", sql)
+        self.assertIn("orders.processed_at >= '2026-08-01'", sql)
+
+    def test_sales_export_query_reuses_overview_filters(self):
+        session = CapturingSession(
+            [("order-1", "Example", 2, Decimal("40"), Decimal("5"), Decimal("35"))]
+        )
+
+        rows = DashboardRepository(session).get_sales_action_export_rows(
+            OverviewFilters(financial_statuses=("PAID",))
+        )
+        sql = str(
+            session.statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+
+        self.assertEqual(rows[0].net_sales, Decimal("35"))
+        self.assertIn("orders.financial_status IN ('PAID')", sql)
 
     def test_affected_products_query_returns_one_status_per_product(self):
         session = CapturingSession([AffectedProductRow()])

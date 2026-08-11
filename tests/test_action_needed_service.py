@@ -2,9 +2,11 @@ from decimal import Decimal
 import unittest
 
 from app.repositories.dashboard_repository import (
+    InventoryActionExportRow,
     InventoryAffectedProduct,
     InventoryHealthMetrics,
     OverviewSalesMetrics,
+    SalesActionExportRow,
 )
 from app.services.dashboard_service import ActionNeededService
 
@@ -28,6 +30,12 @@ class StubDashboardRepository:
         self.inventory_threshold = low_stock_threshold
         return self.affected_products
 
+    def get_inventory_action_export_rows(self, action_id, threshold, filters):
+        return self.inventory_export_rows
+
+    def get_sales_action_export_rows(self, filters):
+        return self.sales_export_rows
+
 
 def build_service(
     *,
@@ -47,6 +55,8 @@ def build_service(
         ),
         list(affected_products),
     )
+    repository.inventory_export_rows = []
+    repository.sales_export_rows = []
     return ActionNeededService(repository, Decimal("50.00")), repository
 
 
@@ -105,6 +115,10 @@ class ActionNeededServiceTests(unittest.TestCase):
             ["product-1", "product-3"],
         )
         self.assertEqual(response.actions[2].affected_products, [])
+        self.assertEqual(response.actions[0].action_label, "Go to Inventory")
+        self.assertEqual(response.actions[0].action_url, "/app/inventory")
+        self.assertTrue(response.actions[0].download_available)
+        self.assertEqual(response.actions[2].action_label, "Go to Sales")
 
     def test_no_orders_is_a_warning_and_does_not_emit_low_aov(self):
         service, _repository = build_service(
@@ -119,6 +133,51 @@ class ActionNeededServiceTests(unittest.TestCase):
         self.assertEqual(response.actions[0].id, "sales_no_orders")
         self.assertEqual(response.actions[0].priority, "warning")
         self.assertEqual(response.actions[0].affected_products, [])
+        self.assertEqual(response.actions[0].category, "orders")
+        self.assertEqual(response.actions[0].action_label, "Go to Orders")
+
+    def test_inventory_export_contains_only_requested_issue_rows(self):
+        service, repository = build_service()
+        repository.inventory_export_rows = [
+            InventoryActionExportRow(
+                "product-1", "Example", None, None, 3, None, 7
+            )
+        ]
+
+        export = service.get_action_export("inventory_low_stock")
+
+        self.assertEqual(export.filename, "low_stock_products.csv")
+        self.assertIn("affected_product_name", export.content)
+        self.assertIn("inventory_low_stock,3", export.content)
+
+    def test_sales_export_contains_required_columns_and_filtered_rows(self):
+        service, repository = build_service()
+        repository.sales_export_rows = [
+            SalesActionExportRow(
+                "order-1",
+                "Example",
+                2,
+                Decimal("40.00"),
+                Decimal("5.00"),
+                Decimal("35.00"),
+            )
+        ]
+
+        export = service.get_action_export("sales_low_average_order_value")
+
+        self.assertIn(
+            "order_id,product_name,units,gross_sales,discount_amount,net_sales,issue_type,issue_value",
+            export.content,
+        )
+        self.assertIn("order-1,Example,2,40.00,5.00,35.00", export.content)
+
+    def test_no_orders_export_is_header_only(self):
+        service, _repository = build_service(total_orders=0, total_revenue=None)
+
+        export = service.get_action_export("sales_no_orders")
+
+        self.assertEqual(export.filename, "order_issues.csv")
+        self.assertEqual(len(export.content.splitlines()), 1)
 
     def test_ignores_missing_revenue_for_existing_orders(self):
         service, _repository = build_service(

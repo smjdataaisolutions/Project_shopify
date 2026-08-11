@@ -109,11 +109,14 @@ class ActionNeededItem(BaseModel):
         "sales_low_average_order_value",
     ]
     priority: Literal["critical", "warning", "recommendation"]
-    category: Literal["inventory", "sales"]
+    category: Literal["inventory", "orders", "products", "sales"]
     title: str
     message: str
     affected_products: list[AffectedProduct] = Field(default_factory=list)
     recommended_action: str
+    action_label: str
+    action_url: str
+    download_available: bool = True
 
 
 class ActionNeededResponse(BaseModel):

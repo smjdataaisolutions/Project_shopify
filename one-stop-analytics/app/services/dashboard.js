@@ -1,3 +1,5 @@
+import { downloadCsv } from "./download";
+
 const DASHBOARD_ENDPOINT = "/api/dashboard";
 const BUSINESS_HIGHLIGHTS_ENDPOINT = "/api/analytics/overview/business-highlights";
 const ACTION_NEEDED_ENDPOINT = "/api/analytics/overview/action-needed";
@@ -55,6 +57,14 @@ export async function fetchActionNeeded(filters) {
   }
 
   return response.json();
+}
+
+export async function downloadActionNeededCsv({ actionId, filters }) {
+  const endpoint = withOverviewFilters(
+    `${ACTION_NEEDED_ENDPOINT}/${encodeURIComponent(actionId)}/download`,
+    filters,
+  );
+  await downloadCsv(endpoint, "overview-action-needed-records.csv");
 }
 
 export async function fetchOverviewFilterOptions() {
