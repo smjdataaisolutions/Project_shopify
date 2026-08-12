@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { InventoryTable } from "../components/inventory/InventoryTable";
 import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchInventoryKpis } from "../services/inventory";
@@ -191,6 +192,10 @@ export default function Inventory() {
           </div>
         </s-section>
       ) : null}
+
+      <s-section accessibilityLabel="Inventory details">
+        <InventoryTable />
+      </s-section>
     </s-page>
   );
 }
