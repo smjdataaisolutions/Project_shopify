@@ -3,6 +3,7 @@ import unittest
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.repositories.inventory_repository import InventoryFilters
 from app.routers.inventory import get_inventory_kpis
 
 
@@ -13,7 +14,11 @@ from app.routers.inventory import get_inventory_kpis
 class InventoryPostgresTests(unittest.TestCase):
     def test_inventory_kpis_use_real_postgresql_and_api_contract(self):
         with SessionLocal() as db:
-            payload = get_inventory_kpis(db=db, settings=get_settings()).model_dump()
+            payload = get_inventory_kpis(
+                filters=InventoryFilters(),
+                db=db,
+                settings=get_settings(),
+            ).model_dump()
 
         self.assertEqual(
             set(payload),

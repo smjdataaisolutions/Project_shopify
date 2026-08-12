@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import Integer, case, cast, func, literal, select
 from sqlalchemy.dialects.postgresql import JSONPATH
@@ -43,6 +43,27 @@ class InventoryTableResult:
     total_inventory_units: int = 0
 
 
+@dataclass(frozen=True)
+class InventoryFilters:
+    location_ids: tuple[str, ...] = ()
+    vendors: tuple[str, ...] = ()
+    inventory_tracked: bool | None = None
+    inventory_statuses: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class InventoryLocationOption:
+    id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class InventoryFilterOptions:
+    locations: list[InventoryLocationOption]
+    vendors: list[str]
+    latest_inventory_sync_at: datetime | None
+
+
 class InventoryRepository:
     """PostgreSQL aggregates used to calculate Inventory KPIs."""
 
@@ -54,12 +75,20 @@ class InventoryRepository:
         start_date: date,
         end_date: date,
         low_stock_threshold: int,
+        filters: InventoryFilters = InventoryFilters(),
     ) -> InventoryKpiInputs:
         inventory_row = self.db.execute(
-            self._inventory_metrics_statement(low_stock_threshold)
+            self._inventory_metrics_statement(low_stock_threshold, filters)
         ).one()
         units_sold = self.db.scalar(
-            self._units_sold_statement(start_date, end_date)
+            self._units_sold_statement(
+                start_date,
+                end_date,
+                self._eligible_product_ids_statement(
+                    filters,
+                    low_stock_threshold,
+                ) if _has_inventory_filters(filters) else None,
+            )
         ) or 0
 
         return InventoryKpiInputs(
@@ -70,21 +99,66 @@ class InventoryRepository:
             units_sold=units_sold,
         )
 
+    def get_filter_options(self) -> InventoryFilterOptions:
+        location_rows = self.db.execute(
+            select(Location.id, Location.name)
+            .where(func.nullif(func.btrim(Location.name), "").is_not(None))
+            .order_by(func.lower(func.btrim(Location.name)), Location.id)
+        ).all()
+        vendor_options = (
+            select(func.btrim(Product.vendor).label("vendor"))
+            .where(func.nullif(func.btrim(Product.vendor), "").is_not(None))
+            .distinct()
+            .subquery()
+        )
+        vendors = self.db.execute(
+            select(vendor_options.c.vendor).order_by(
+                func.lower(vendor_options.c.vendor)
+            )
+        ).scalars().all()
+        return InventoryFilterOptions(
+            locations=[
+                InventoryLocationOption(id=row.id, name=row.name.strip())
+                for row in location_rows
+            ],
+            vendors=list(vendors),
+            latest_inventory_sync_at=self.db.scalar(
+                select(func.max(InventoryLevel.updated_at))
+            ),
+        )
+
     def get_inventory_table(
         self,
         page: int,
         page_size: int,
         sort_order: str = "asc",
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
     ) -> InventoryTableResult:
-        base_statement = self._inventory_table_base_statement()
+        base_statement = self._inventory_table_base_statement(
+            filters,
+            low_stock_threshold,
+        )
         total_items = self.db.scalar(
             select(func.count()).select_from(base_statement.subquery())
         ) or 0
         total_inventory_units = self.db.scalar(
-            self._total_inventory_units_statement()
+            self._total_inventory_units_statement(
+                filters,
+                low_stock_threshold,
+            )
         ) or 0
-        statement = self._inventory_table_statement(page, page_size, sort_order)
-        rows = [InventoryTableRow(*row) for row in self.db.execute(statement).all()]
+        statement = self._inventory_table_statement(
+            page,
+            page_size,
+            sort_order,
+            filters,
+            low_stock_threshold,
+        )
+        rows = [
+            InventoryTableRow(*row)
+            for row in self.db.execute(statement).all()
+        ]
         return InventoryTableResult(
             rows=rows,
             total_items=total_items,
@@ -94,9 +168,18 @@ class InventoryRepository:
     def get_inventory_table_export(
         self,
         sort_order: str = "asc",
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
     ) -> list[InventoryTableRow]:
-        statement = self._inventory_table_ordered_statement(sort_order)
-        return [InventoryTableRow(*row) for row in self.db.execute(statement).all()]
+        statement = self._inventory_table_ordered_statement(
+            sort_order,
+            filters,
+            low_stock_threshold,
+        )
+        return [
+            InventoryTableRow(*row)
+            for row in self.db.execute(statement).all()
+        ]
 
     @classmethod
     def _inventory_table_statement(
@@ -104,13 +187,27 @@ class InventoryRepository:
         page: int,
         page_size: int,
         sort_order: str,
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
     ):
-        statement = cls._inventory_table_ordered_statement(sort_order)
+        statement = cls._inventory_table_ordered_statement(
+            sort_order,
+            filters,
+            low_stock_threshold,
+        )
         return statement.offset((page - 1) * page_size).limit(page_size)
 
     @classmethod
-    def _inventory_table_ordered_statement(cls, sort_order: str):
-        statement = cls._inventory_table_base_statement()
+    def _inventory_table_ordered_statement(
+        cls,
+        sort_order: str,
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
+    ):
+        statement = cls._inventory_table_base_statement(
+            filters,
+            low_stock_threshold,
+        )
         inventory_units = statement.selected_columns.inventory_units
         inventory_order = (
             inventory_units.desc().nulls_last()
@@ -128,19 +225,16 @@ class InventoryRepository:
             InventoryLevel.location_id.asc().nulls_last(),
         )
 
-    @staticmethod
-    def _inventory_table_base_statement():
-        available_quantity = cast(
-            func.jsonb_path_query_first(
-                InventoryLevel.quantities,
-                cast(
-                    literal('$[*] ? (@.name == "available").quantity'),
-                    JSONPATH,
-                ),
-            ),
-            Integer,
-        ).label("inventory_units")
-        return (
+    @classmethod
+    def _inventory_table_base_statement(
+        cls,
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
+    ):
+        available_quantity = cls._available_quantity_expression().label(
+            "inventory_units"
+        )
+        statement = (
             select(
                 ProductVariant.id.label("variant_id"),
                 InventoryLevel.location_id,
@@ -155,59 +249,95 @@ class InventoryRepository:
             .join(Product, Product.id == ProductVariant.product_id, isouter=True)
             .join(
                 InventoryLevel,
-                InventoryLevel.inventory_item_id == ProductVariant.inventory_item_id,
+                InventoryLevel.inventory_item_id
+                == ProductVariant.inventory_item_id,
                 isouter=True,
             )
-            .join(Location, Location.id == InventoryLevel.location_id, isouter=True)
+            .join(
+                Location,
+                Location.id == InventoryLevel.location_id,
+                isouter=True,
+            )
+        )
+        return cls._apply_inventory_filters(
+            statement,
+            filters,
+            available_quantity,
+            low_stock_threshold,
         )
 
     @classmethod
-    def _inventory_metrics_statement(cls, low_stock_threshold: int):
-        products = cls._product_inventory_statement().subquery()
+    def _inventory_metrics_statement(
+        cls,
+        low_stock_threshold: int,
+        filters: InventoryFilters = InventoryFilters(),
+    ):
+        inventory_items = cls._tracked_inventory_items_statement(
+            filters,
+            low_stock_threshold,
+        ).subquery()
         return select(
-            func.coalesce(func.sum(products.c.inventory_units), 0).label(
+            func.coalesce(
+                func.sum(func.greatest(inventory_items.c.inventory_units, 0)),
+                0,
+            ).label(
                 "total_inventory_units"
             ),
             func.count()
-            .filter(products.c.inventory_units > 0)
+            .filter(inventory_items.c.inventory_units > 0)
             .label("in_stock_products"),
             func.count()
-            .filter(products.c.inventory_units.between(1, low_stock_threshold))
+            .filter(
+                inventory_items.c.inventory_units.between(
+                    1,
+                    low_stock_threshold,
+                )
+            )
             .label("low_stock_products"),
             func.count()
-            .filter(products.c.inventory_units == 0)
+            .filter(inventory_items.c.inventory_units == 0)
             .label("out_of_stock_products"),
-        ).select_from(products)
+        ).select_from(inventory_items)
 
     @classmethod
-    def _total_inventory_units_statement(cls):
-        products = cls._product_inventory_statement().subquery()
+    def _total_inventory_units_statement(
+        cls,
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
+    ):
+        inventory_items = cls._tracked_inventory_items_statement(
+            filters,
+            low_stock_threshold,
+        ).subquery()
         return select(
-            func.coalesce(func.sum(products.c.inventory_units), 0)
-        ).select_from(products)
+            func.coalesce(
+                func.sum(func.greatest(inventory_items.c.inventory_units, 0)),
+                0,
+            )
+        ).select_from(inventory_items)
 
-    @staticmethod
-    def _product_inventory_statement():
-        """Aggregate Shopify's shop-wide variant availability once per product."""
-        return (
-            select(
-                ProductVariant.product_id,
-                func.greatest(
-                    func.sum(ProductVariant.inventory_quantity),
-                    0,
-                ).label("inventory_units"),
-            )
-            .where(
-                ProductVariant.product_id.is_not(None),
-                ProductVariant.inventory_tracked.is_(True),
-                ProductVariant.inventory_quantity.is_not(None),
-            )
-            .group_by(ProductVariant.product_id)
+    @classmethod
+    def _tracked_inventory_items_statement(
+        cls,
+        filters: InventoryFilters,
+        low_stock_threshold: int,
+    ):
+        rows = cls._filtered_inventory_scope_statement(
+            filters,
+            low_stock_threshold,
+        ).subquery()
+        return select(rows.c.inventory_units).where(
+            rows.c.inventory_tracked.is_(True),
+            rows.c.inventory_units.is_not(None),
         )
 
     @staticmethod
-    def _units_sold_statement(start_date: date, end_date: date):
-        return (
+    def _units_sold_statement(
+        start_date: date,
+        end_date: date,
+        eligible_product_ids=None,
+    ):
+        statement = (
             select(func.coalesce(func.sum(OrderLineItem.quantity), 0))
             .select_from(OrderLineItem)
             .join(Order, Order.id == OrderLineItem.order_id)
@@ -217,3 +347,126 @@ class InventoryRepository:
                 Order.processed_at < end_date + timedelta(days=1),
             )
         )
+        if eligible_product_ids is not None:
+            statement = statement.where(
+                OrderLineItem.product_id.in_(eligible_product_ids)
+            )
+        return statement
+
+    @classmethod
+    def _eligible_product_ids_statement(
+        cls,
+        filters: InventoryFilters,
+        low_stock_threshold: int,
+    ):
+        rows = cls._filtered_inventory_scope_statement(
+            filters,
+            low_stock_threshold,
+        ).subquery()
+        return select(rows.c.product_id).where(
+            rows.c.product_id.is_not(None),
+            rows.c.inventory_tracked.is_(True),
+            rows.c.inventory_units.is_not(None),
+        ).distinct()
+
+    @classmethod
+    def _filtered_inventory_scope_statement(
+        cls,
+        filters: InventoryFilters,
+        low_stock_threshold: int,
+    ):
+        available_quantity = cls._available_quantity_expression().label(
+            "inventory_units"
+        )
+        statement = (
+            select(
+                ProductVariant.product_id,
+                ProductVariant.inventory_tracked,
+                available_quantity,
+            )
+            .select_from(ProductVariant)
+            .join(Product, Product.id == ProductVariant.product_id, isouter=True)
+            .join(
+                InventoryLevel,
+                InventoryLevel.inventory_item_id
+                == ProductVariant.inventory_item_id,
+                isouter=True,
+            )
+            .join(Location, Location.id == InventoryLevel.location_id, isouter=True)
+        )
+        return cls._apply_inventory_filters(
+            statement,
+            filters,
+            available_quantity,
+            low_stock_threshold,
+        )
+
+    @staticmethod
+    def _available_quantity_expression():
+        return cast(
+            func.jsonb_path_query_first(
+                InventoryLevel.quantities,
+                cast(
+                    literal('$[*] ? (@.name == "available").quantity'),
+                    JSONPATH,
+                ),
+            ),
+            Integer,
+        )
+
+    @classmethod
+    def _apply_inventory_filters(
+        cls,
+        statement,
+        filters: InventoryFilters,
+        available_quantity,
+        low_stock_threshold: int,
+    ):
+        if filters.location_ids:
+            statement = statement.where(
+                InventoryLevel.location_id.in_(filters.location_ids)
+            )
+        if filters.vendors:
+            statement = statement.where(
+                func.btrim(Product.vendor).in_(filters.vendors)
+            )
+        if filters.inventory_tracked is True:
+            statement = statement.where(ProductVariant.inventory_tracked.is_(True))
+        elif filters.inventory_tracked is False:
+            statement = statement.where(
+                ProductVariant.inventory_tracked.is_not(True)
+            )
+        if filters.inventory_statuses:
+            statement = statement.where(
+                cls._inventory_status_expression(
+                    available_quantity,
+                    low_stock_threshold,
+                ).in_(filters.inventory_statuses)
+            )
+        return statement
+
+    @staticmethod
+    def _inventory_status_expression(available_quantity, low_stock_threshold: int):
+        return case(
+            (
+                ProductVariant.inventory_tracked.is_not(True),
+                literal("untracked"),
+            ),
+            (available_quantity.is_(None), literal("unknown")),
+            (available_quantity < 0, literal("negative")),
+            (available_quantity == 0, literal("out_of_stock")),
+            (
+                available_quantity <= low_stock_threshold,
+                literal("low_stock"),
+            ),
+            else_=literal("healthy"),
+        )
+
+
+def _has_inventory_filters(filters: InventoryFilters) -> bool:
+    return bool(
+        filters.location_ids
+        or filters.vendors
+        or filters.inventory_tracked is not None
+        or filters.inventory_statuses
+    )

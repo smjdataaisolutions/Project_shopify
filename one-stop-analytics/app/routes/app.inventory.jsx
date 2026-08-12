@@ -1,6 +1,12 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import {
+  AppliedInventoryFilters,
+  EMPTY_INVENTORY_FILTERS,
+  hasInventoryFilters,
+  InventoryFilters,
+} from "../components/inventory/InventoryFilters";
 import { InventoryTable } from "../components/inventory/InventoryTable";
 import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNavigation";
 import styles from "../components/dashboard/dashboard.module.css";
@@ -25,38 +31,38 @@ function getMetrics(kpis) {
   return [
     {
       id: "total-inventory-units",
-      label: "Total inventory units",
+      label: "Total inv. units",
       value: countFormatter.format(kpis.total_inventory_units),
       definition: [
-        "Definition: Total sellable units across inventory-tracked products.",
-        "Formula: Sum max(sum of known variant quantities per product, 0).",
+        "Definition: Total sellable units across tracked variant-location inventory items.",
+        "Formula: Sum max(available quantity per table row, 0).",
       ],
     },
     {
       id: "in-stock-products",
-      label: "In-stock products",
+      label: "In-stock inv. items",
       value: countFormatter.format(kpis.in_stock_products),
       definition: [
-        "Definition: Tracked products that currently have sellable inventory.",
-        "Formula: Count products whose aggregated inventory is greater than 0.",
+        "Definition: Tracked variant-location rows with sellable inventory.",
+        "Formula: Count table rows whose available quantity is greater than 0.",
       ],
     },
     {
       id: "low-stock-products",
-      label: "Low-stock products",
+      label: "Low-stock inv. items",
       value: countFormatter.format(kpis.low_stock_products),
       definition: [
-        "Definition: Tracked products approaching stockout at the current threshold.",
-        "Formula: Count products with aggregated inventory from 1 through 10.",
+        "Definition: Tracked variant-location rows approaching stockout.",
+        "Formula: Count table rows with available quantity from 1 through 10.",
       ],
     },
     {
       id: "out-of-stock-products",
-      label: "Out-of-stock products",
+      label: "Out-of-stock inv. items",
       value: countFormatter.format(kpis.out_of_stock_products),
       definition: [
-        "Definition: Tracked products with no sellable inventory remaining.",
-        "Formula: Count products whose normalized aggregated inventory equals 0.",
+        "Definition: Tracked variant-location rows with no inventory remaining.",
+        "Formula: Count table rows whose available quantity equals 0.",
       ],
     },
     {
@@ -64,11 +70,11 @@ function getMetrics(kpis) {
       label: "Sell-through rate",
       value:
         kpis.sell_through_rate == null
-          ? "—"
+          ? "\u2014"
           : `${derivedFormatter.format(kpis.sell_through_rate)}%`,
       definition: [
         "Definition: Share of available stock sold during the trailing 30 days.",
-        "Formula: Units sold ÷ (units sold + current inventory) × 100.",
+        "Formula: Units sold / (units sold + current inventory) x 100.",
       ],
     },
   ];
@@ -111,6 +117,14 @@ function InventoryKpiCard({ id, label, value, definition }) {
 }
 
 export default function Inventory() {
+  const [areFiltersCollapsed, setAreFiltersCollapsed] = useState(false);
+  const [filters, setFilters] = useState(() => ({
+    ...EMPTY_INVENTORY_FILTERS,
+    locationIds: [],
+    vendors: [],
+    inventoryStatuses: [],
+  }));
+  const [filterOptions, setFilterOptions] = useState(null);
   const [kpis, setKpis] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -122,7 +136,7 @@ export default function Inventory() {
     setError(null);
     setKpis(null);
 
-    fetchInventoryKpis()
+    fetchInventoryKpis(filters)
       .then((response) => {
         if (active) setKpis(response);
       })
@@ -140,62 +154,122 @@ export default function Inventory() {
     return () => {
       active = false;
     };
-  }, [requestVersion]);
+  }, [filters, requestVersion]);
 
   const hasInventoryData =
     kpis && kpis.in_stock_products + kpis.out_of_stock_products > 0;
+  const hasAppliedFilters = hasInventoryFilters(filters);
+  const filterKey = JSON.stringify(filters);
+  const latestInventorySync = filterOptions?.date_range
+    ?.latest_inventory_sync_at
+    ? new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(filterOptions.date_range.latest_inventory_sync_at))
+    : null;
 
   return (
     <s-page heading="Inventory" inlineSize="large">
       <AnalyticsTopNavigation />
 
-      {isLoading && !kpis ? (
-        <s-section heading="Loading inventory">
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <s-spinner accessibilityLabel="Loading inventory metrics" />
-            <s-text>Retrieving your latest inventory metrics.</s-text>
-          </s-stack>
-        </s-section>
-      ) : null}
+      <div
+        className={`${styles.overviewLayout} ${
+          areFiltersCollapsed ? styles.overviewLayoutCollapsed : ""
+        }`}
+      >
+        <InventoryFilters
+          appliedFilters={filters}
+          onApply={setFilters}
+          onOptionsChange={setFilterOptions}
+          isCollapsed={areFiltersCollapsed}
+          onCollapse={() => setAreFiltersCollapsed(true)}
+        />
 
-      {error ? (
-        <s-section heading="Unable to load inventory">
-          <s-stack direction="block" gap="base">
-            <s-text>{error}</s-text>
+        {areFiltersCollapsed ? (
+          <aside
+            className={styles.collapsedFilters}
+            aria-label="Collapsed inventory filters"
+          >
             <s-button
-              onClick={() => setRequestVersion((version) => version + 1)}
-            >
-              Try again
-            </s-button>
-          </s-stack>
-        </s-section>
-      ) : null}
+              icon="chevron-right"
+              variant="tertiary"
+              accessibilityLabel="Expand inventory filters"
+              onClick={() => setAreFiltersCollapsed(false)}
+            />
+          </aside>
+        ) : null}
 
-      {kpis && !hasInventoryData ? (
-        <s-section heading="Inventory overview">
-          <s-stack direction="block" gap="small">
-            <s-heading>No tracked inventory yet</s-heading>
-            <s-text tone="subdued">
-              Inventory KPI cards will appear after tracked product inventory
-              is synchronized.
-            </s-text>
-          </s-stack>
-        </s-section>
-      ) : null}
+        <div className={styles.overviewContent}>
+          <div className={styles.inventoryContextRow}>
+            <AppliedInventoryFilters
+              filters={filters}
+              options={filterOptions}
+              onChange={setFilters}
+            />
 
-      {hasInventoryData ? (
-        <s-section heading="Inventory overview">
-          <div className={styles.grid}>
-            {getMetrics(kpis).map((metric) => (
-              <InventoryKpiCard key={metric.id} {...metric} />
-            ))}
+            {latestInventorySync ? (
+              <div className={styles.inventoryAsOf}>
+                <s-text tone="subdued">
+                  Inventory as of {latestInventorySync}
+                </s-text>
+              </div>
+            ) : null}
           </div>
-        </s-section>
-      ) : null}
 
-      <s-section accessibilityLabel="Inventory details">
-        <InventoryTable />
-      </s-section>
+          {isLoading && !kpis ? (
+            <s-section heading="Loading inventory">
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-spinner accessibilityLabel="Loading inventory metrics" />
+                <s-text>Retrieving your latest inventory metrics.</s-text>
+              </s-stack>
+            </s-section>
+          ) : null}
+
+          {error ? (
+            <s-section heading="Unable to load inventory">
+              <s-stack direction="block" gap="base">
+                <s-text>{error}</s-text>
+                <s-button
+                  onClick={() => setRequestVersion((version) => version + 1)}
+                >
+                  Try again
+                </s-button>
+              </s-stack>
+            </s-section>
+          ) : null}
+
+          {kpis && !hasInventoryData ? (
+            <s-section heading="Inventory overview">
+              <s-stack direction="block" gap="small">
+                <s-heading>
+                  {hasAppliedFilters
+                    ? "No inventory matches the applied filters"
+                    : "No tracked inventory yet"}
+                </s-heading>
+                <s-text tone="subdued">
+                  {hasAppliedFilters
+                    ? "Clear or adjust the filters to see inventory KPIs."
+                    : "Inventory KPI cards will appear after tracked product inventory is synchronized."}
+                </s-text>
+              </s-stack>
+            </s-section>
+          ) : null}
+
+          {hasInventoryData ? (
+            <s-section heading="Inventory overview">
+              <div className={styles.grid}>
+                {getMetrics(kpis).map((metric) => (
+                  <InventoryKpiCard key={metric.id} {...metric} />
+                ))}
+              </div>
+            </s-section>
+          ) : null}
+
+          <s-section accessibilityLabel="Inventory details">
+            <InventoryTable key={filterKey} filters={filters} />
+          </s-section>
+        </div>
+      </div>
     </s-page>
   );
 }

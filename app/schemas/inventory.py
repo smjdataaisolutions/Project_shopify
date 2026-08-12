@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -15,7 +16,8 @@ class InventoryKpiResponse(BaseModel):
 class InventoryTableItem(BaseModel):
     variant_id: str
     location_id: str | None
-    product_variant_name: str
+    product: str
+    variant: str
     inventory_units: int | None
     location: str | None
     inventory_tracked: bool
@@ -44,3 +46,36 @@ class InventoryTableResponse(BaseModel):
     items: list[InventoryTableItem]
     pagination: InventoryTablePagination
     totals: InventoryTableTotals
+
+
+class InventoryLocationFilterOption(BaseModel):
+    id: str
+    name: str
+
+
+class InventoryFilterChoice(BaseModel):
+    label: str
+    value: str | bool
+
+
+class InventoryUnavailableFilter(BaseModel):
+    supported: Literal[False] = False
+    message: str
+
+
+class InventoryDateRangeCapability(InventoryUnavailableFilter):
+    source_field: None = None
+    latest_inventory_sync_at: datetime | None = None
+
+
+class InventoryCollectionCapability(InventoryUnavailableFilter):
+    options: list[InventoryLocationFilterOption] = Field(default_factory=list)
+
+
+class InventoryFilterOptionsResponse(BaseModel):
+    locations: list[InventoryLocationFilterOption]
+    vendors: list[str]
+    collections: InventoryCollectionCapability
+    inventory_tracked: list[InventoryFilterChoice]
+    inventory_statuses: list[InventoryFilterChoice]
+    date_range: InventoryDateRangeCapability

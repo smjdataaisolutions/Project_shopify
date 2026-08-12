@@ -1,0 +1,19 @@
+.paginationSummary {
+  position: relative;
+  z-index: 1;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-block-start: -4.5rem;
+  padding-inline: 1rem;
+  pointer-events: none;
+  text-align: right;
+}
+
+@media (max-width: 480px) {
+  .paginationSummary {
+    padding-inline-start: 6rem;
+    font-size: 0.875rem;
+  }
+}

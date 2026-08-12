@@ -5,7 +5,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.repositories.inventory_repository import InventoryKpiInputs
+from app.repositories.inventory_repository import InventoryFilters, InventoryKpiInputs
 from app.routers.inventory import get_inventory_kpis, router
 from app.schemas.inventory import InventoryKpiResponse
 
@@ -16,6 +16,7 @@ class InventoryApiTests(unittest.TestCase):
         get_inputs.return_value = InventoryKpiInputs(320, 12, 3, 2, 680)
 
         response = get_inventory_kpis(
+            filters=InventoryFilters(),
             db=object(),
             settings=SimpleNamespace(low_stock_threshold=10),
         )
@@ -47,6 +48,7 @@ class InventoryApiTests(unittest.TestCase):
 
         with self.assertRaises(HTTPException) as context:
             get_inventory_kpis(
+                filters=InventoryFilters(),
                 db=object(),
                 settings=SimpleNamespace(low_stock_threshold=10),
             )
