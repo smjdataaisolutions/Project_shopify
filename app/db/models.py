@@ -16,6 +16,7 @@ class Product(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
+    vendor: Mapped[str | None] = mapped_column(String, nullable=True)
     variants: Mapped[list["ProductVariant"]] = relationship(back_populates="product")
 
 
@@ -50,6 +51,9 @@ class InventoryLevel(Base):
     location_name: Mapped[str | None] = mapped_column(String, nullable=True)
     tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     quantities: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Order(Base):

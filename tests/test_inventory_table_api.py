@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories.inventory_repository import (
+    InventoryFilters,
     InventoryTableResult,
     InventoryTableRow,
 )
@@ -14,8 +15,8 @@ from app.routers.inventory import (
     get_inventory_table,
     router,
 )
-from app.schemas.inventory import InventoryTableResponse
 from app.services.inventory_service import InventoryTableCsvExport
+from app.schemas.inventory import InventoryTableResponse
 
 
 class InventoryTableApiTests(unittest.TestCase):
@@ -23,19 +24,20 @@ class InventoryTableApiTests(unittest.TestCase):
     def test_download_returns_complete_csv_attachment(self, get_export):
         get_export.return_value = InventoryTableCsvExport(
             filename="inventory-details.csv",
-            content="Product Variant Name,Inventory Units\r\nShirt,18\r\n",
+            content="Product,Variant,Inventory Units\r\nShirt,Small,18\r\n",
         )
 
         response = download_inventory_table(
             sort_order="desc",
+            filters=InventoryFilters(),
             db=object(),
             settings=SimpleNamespace(low_stock_threshold=10),
         )
 
-        get_export.assert_called_once_with("desc")
+        get_export.assert_called_once_with("desc", InventoryFilters())
         self.assertTrue(response.media_type.startswith("text/csv"))
         self.assertIn("attachment;", response.headers["content-disposition"])
-        self.assertIn(b"Shirt,18", response.body)
+        self.assertIn(b"Shirt,Small,18", response.body)
 
     @patch("app.routers.inventory.InventoryRepository.get_inventory_table")
     def test_endpoint_returns_typed_paginated_response(self, get_table):
@@ -60,11 +62,13 @@ class InventoryTableApiTests(unittest.TestCase):
             page=1,
             page_size=25,
             sort_order="desc",
+            filters=InventoryFilters(),
             db=object(),
             settings=SimpleNamespace(low_stock_threshold=10),
         )
 
-        get_table.assert_called_once_with(1, 25, "desc")
+        get_table.assert_called_once_with(1, 25, "desc", InventoryFilters(), 10)
+
         self.assertEqual(
             response.model_dump(),
             {
@@ -72,7 +76,8 @@ class InventoryTableApiTests(unittest.TestCase):
                     {
                         "variant_id": "variant-1",
                         "location_id": "location-1",
-                        "product_variant_name": "Classic T-Shirt / Small",
+                        "product": "Classic T-Shirt",
+                        "variant": "Small",
                         "inventory_units": -1,
                         "location": "Main Warehouse",
                         "inventory_tracked": True,
@@ -91,8 +96,7 @@ class InventoryTableApiTests(unittest.TestCase):
 
     def test_route_uses_documented_path_and_schema(self):
         route = next(
-            route
-            for route in router.routes
+            route for route in router.routes
             if route.path == "/api/analytics/inventory/table"
         )
         self.assertEqual(route.response_model, InventoryTableResponse)
@@ -107,6 +111,7 @@ class InventoryTableApiTests(unittest.TestCase):
                 page=1,
                 page_size=25,
                 sort_order="asc",
+                filters=InventoryFilters(),
                 db=object(),
                 settings=SimpleNamespace(low_stock_threshold=10),
             )

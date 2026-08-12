@@ -4,6 +4,8 @@ import {
   downloadInventoryTableCsv,
   fetchInventoryTable,
 } from "../../services/inventory";
+import { hasInventoryFilters } from "./InventoryFilters";
+import styles from "./inventoryTable.module.css";
 
 const PAGE_SIZE = 25;
 const numberFormatter = new Intl.NumberFormat("en-US", {
@@ -26,7 +28,7 @@ function InventoryStatus({ item }) {
   return <s-badge tone={presentation.tone}>{presentation.label}</s-badge>;
 }
 
-export function InventoryTable() {
+export function InventoryTable({ filters }) {
   const [page, setPage] = useState(1);
   const [sortOrder, setSortOrder] = useState("asc");
   const [result, setResult] = useState(null);
@@ -41,7 +43,12 @@ export function InventoryTable() {
     setIsLoading(true);
     setError(null);
 
-    fetchInventoryTable({ page, pageSize: PAGE_SIZE, sortOrder })
+    fetchInventoryTable({
+      page,
+      pageSize: PAGE_SIZE,
+      sortOrder,
+      filters,
+    })
       .then((response) => {
         if (active) setResult(response);
       })
@@ -59,7 +66,7 @@ export function InventoryTable() {
     return () => {
       active = false;
     };
-  }, [page, requestVersion, sortOrder]);
+  }, [filters, page, requestVersion, sortOrder]);
 
   const toggleInventoryUnitsSort = () => {
     setPage(1);
@@ -72,7 +79,7 @@ export function InventoryTable() {
     setDownloadError(null);
     setIsDownloading(true);
     try {
-      await downloadInventoryTableCsv({ sortOrder });
+      await downloadInventoryTableCsv({ sortOrder, filters });
     } catch (requestError) {
       setDownloadError(
         requestError.message || "Unable to download inventory details.",
@@ -105,12 +112,18 @@ export function InventoryTable() {
   }
 
   if (!result?.items.length) {
+    const isFiltered = hasInventoryFilters(filters);
     return (
       <s-stack direction="block" gap="small">
-        <s-heading>No inventory records yet</s-heading>
+        <s-heading>
+          {isFiltered
+            ? "No inventory matches the applied filters"
+            : "No inventory records yet"}
+        </s-heading>
         <s-text tone="subdued">
-          Variant and location inventory will appear after Shopify inventory is
-          synchronized.
+          {isFiltered
+            ? "Clear or adjust the filters to see inventory records."
+            : "Variant and location inventory will appear after Shopify inventory is synchronized."}
         </s-text>
       </s-stack>
     );
@@ -139,7 +152,7 @@ export function InventoryTable() {
       ) : null}
       <s-table
         variant="auto"
-        paginate={pagination.total_pages > 1}
+        paginate
         loading={isLoading}
         hasPreviousPage={pagination.page > 1}
         hasNextPage={pagination.page < pagination.total_pages}
@@ -148,9 +161,10 @@ export function InventoryTable() {
       >
         <s-table-header-row>
           <s-table-header listSlot="primary">
-            Product Variant Name
+            Product
           </s-table-header>
-          <s-table-header listSlot="labeled" format="numeric">
+          <s-table-header listSlot="secondary">Variant</s-table-header>
+          <s-table-header listSlot="labeled" format="base">
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-text>Inventory Units</s-text>
               <s-button
@@ -173,10 +187,11 @@ export function InventoryTable() {
             <s-table-row
               key={`${item.variant_id}:${item.location_id || "unassigned"}`}
             >
-              <s-table-cell>{item.product_variant_name}</s-table-cell>
+              <s-table-cell>{item.product}</s-table-cell>
+              <s-table-cell>{item.variant}</s-table-cell>
               <s-table-cell>
                 {item.inventory_units == null
-                  ? "—"
+                  ? "\u2014"
                   : numberFormatter.format(item.inventory_units)}
               </s-table-cell>
               <s-table-cell>
@@ -189,22 +204,23 @@ export function InventoryTable() {
             <s-table-cell>
               <strong>Total inventory units</strong>
             </s-table-cell>
+            <s-table-cell>{"\u2014"}</s-table-cell>
             <s-table-cell>
               <strong>
                 {numberFormatter.format(result.totals.total_inventory_units)}
               </strong>
             </s-table-cell>
-            <s-table-cell>—</s-table-cell>
-            <s-table-cell>—</s-table-cell>
+            <s-table-cell>{"\u2014"}</s-table-cell>
+            <s-table-cell>{"\u2014"}</s-table-cell>
           </s-table-row>
         </s-table-body>
       </s-table>
-      <s-stack direction="inline" justifyContent="end">
+      <div className={styles.paginationSummary}>
         <s-text tone="subdued">
-          Page {pagination.page} of {pagination.total_pages} ·{" "}
+          Page {pagination.page} of {pagination.total_pages} {"\u00b7"}{" "}
           {numberFormatter.format(pagination.total_items)} inventory records
         </s-text>
-      </s-stack>
+      </div>
     </s-stack>
   );
 }

@@ -16,13 +16,15 @@ def compile_sql(statement) -> str:
 
 
 class InventoryRepositoryTests(unittest.TestCase):
-    def test_inventory_query_aggregates_tracked_variants_by_product(self):
+    def test_inventory_query_counts_tracked_variant_location_items(self):
         sql = compile_sql(InventoryRepository._inventory_metrics_statement(10))
 
-        self.assertIn("product_variants.inventory_tracked IS true", sql)
-        self.assertIn("product_variants.inventory_quantity IS NOT NULL", sql)
-        self.assertIn("GROUP BY product_variants.product_id", sql)
-        self.assertIn("greatest(sum(product_variants.inventory_quantity), 0)", sql)
+        self.assertIn("LEFT OUTER JOIN inventory", sql)
+        self.assertIn("jsonb_path_query_first", sql)
+        self.assertIn("inventory_tracked IS true", sql)
+        self.assertIn("inventory_units IS NOT NULL", sql)
+        self.assertNotIn("GROUP BY product_variants.product_id", sql)
+        self.assertIn("sum(greatest", sql)
         self.assertIn("inventory_units > 0", sql)
         self.assertIn("inventory_units BETWEEN 1 AND 10", sql)
         self.assertIn("inventory_units = 0", sql)

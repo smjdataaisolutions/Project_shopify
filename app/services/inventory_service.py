@@ -5,10 +5,18 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import io
 
-from app.repositories.inventory_repository import InventoryRepository
-from app.repositories.inventory_repository import InventoryTableRow
+from app.repositories.inventory_repository import (
+    InventoryFilters,
+    InventoryRepository,
+    InventoryTableRow,
+)
 from app.schemas.inventory import (
+    InventoryCollectionCapability,
+    InventoryDateRangeCapability,
+    InventoryFilterChoice,
+    InventoryFilterOptionsResponse,
     InventoryKpiResponse,
+    InventoryLocationFilterOption,
     InventoryTableItem,
     InventoryTablePagination,
     InventoryTableResponse,
@@ -19,7 +27,8 @@ from app.schemas.inventory import (
 SALES_WINDOW_DAYS = 30
 ONE_DECIMAL = Decimal("0.1")
 INVENTORY_CSV_COLUMNS = (
-    "Product Variant Name",
+    "Product",
+    "Variant",
     "Inventory Units",
     "Inventory Status",
     "Location",
@@ -32,6 +41,22 @@ INVENTORY_STATUS_LABELS = {
     "untracked": "Untracked",
     "unknown": "Quantity unavailable",
 }
+INVENTORY_STATUS_OPTIONS = tuple(
+    InventoryFilterChoice(label=label, value=value)
+    for value, label in INVENTORY_STATUS_LABELS.items()
+)
+INVENTORY_TRACKED_OPTIONS = (
+    InventoryFilterChoice(label="Tracked", value=True),
+    InventoryFilterChoice(label="Untracked", value=False),
+)
+INVENTORY_HISTORY_UNAVAILABLE_MESSAGE = (
+    "Historical inventory data is not available. Showing the latest inventory "
+    "position."
+)
+COLLECTION_UNAVAILABLE_MESSAGE = (
+    "Collection filtering is unavailable because collection membership is not "
+    "present in the current PostgreSQL dataset."
+)
 
 
 @dataclass(frozen=True)
@@ -53,13 +78,36 @@ class InventoryService:
         self.low_stock_threshold = low_stock_threshold
         self.today = today or (lambda: datetime.now(timezone.utc).date())
 
-    def get_kpis(self) -> InventoryKpiResponse:
+    def get_filter_options(self) -> InventoryFilterOptionsResponse:
+        options = self.repository.get_filter_options()
+        return InventoryFilterOptionsResponse(
+            locations=[
+                InventoryLocationFilterOption(id=location.id, name=location.name)
+                for location in options.locations
+            ],
+            vendors=options.vendors,
+            collections=InventoryCollectionCapability(
+                message=COLLECTION_UNAVAILABLE_MESSAGE,
+            ),
+            inventory_tracked=list(INVENTORY_TRACKED_OPTIONS),
+            inventory_statuses=list(INVENTORY_STATUS_OPTIONS),
+            date_range=InventoryDateRangeCapability(
+                message=INVENTORY_HISTORY_UNAVAILABLE_MESSAGE,
+                latest_inventory_sync_at=options.latest_inventory_sync_at,
+            ),
+        )
+
+    def get_kpis(
+        self,
+        filters: InventoryFilters = InventoryFilters(),
+    ) -> InventoryKpiResponse:
         end_date = self.today()
         start_date = end_date - timedelta(days=SALES_WINDOW_DAYS - 1)
         inputs = self.repository.get_kpi_inputs(
             start_date,
             end_date,
             self.low_stock_threshold,
+            filters,
         )
 
         inventory_units = Decimal(inputs.total_inventory_units)
@@ -93,8 +141,15 @@ class InventoryService:
         page: int,
         page_size: int,
         sort_order: str = "asc",
+        filters: InventoryFilters = InventoryFilters(),
     ) -> InventoryTableResponse:
-        result = self.repository.get_inventory_table(page, page_size, sort_order)
+        result = self.repository.get_inventory_table(
+            page,
+            page_size,
+            sort_order,
+            filters,
+            self.low_stock_threshold,
+        )
         total_pages = (
             (result.total_items + page_size - 1) // page_size
             if result.total_items
@@ -118,10 +173,8 @@ class InventoryService:
         return InventoryTableItem(
             variant_id=row.variant_id,
             location_id=row.location_id,
-            product_variant_name=_format_variant_name(
-                row.product_title,
-                row.variant_title,
-            ),
+            product=_clean_text(row.product_title) or "Unnamed product",
+            variant=_format_variant_name(row.variant_title),
             inventory_units=row.inventory_units,
             location=_first_non_empty(
                 row.location_name,
@@ -138,8 +191,13 @@ class InventoryService:
     def get_inventory_table_export(
         self,
         sort_order: str = "asc",
+        filters: InventoryFilters = InventoryFilters(),
     ) -> InventoryTableCsvExport:
-        rows = self.repository.get_inventory_table_export(sort_order)
+        rows = self.repository.get_inventory_table_export(
+            sort_order,
+            filters,
+            self.low_stock_threshold,
+        )
         output = io.StringIO(newline="")
         writer = csv.DictWriter(
             output,
@@ -151,7 +209,8 @@ class InventoryService:
             item = self._build_table_item(row)
             writer.writerow(
                 {
-                    "Product Variant Name": _csv_safe(item.product_variant_name),
+                    "Product": _csv_safe(item.product),
+                    "Variant": _csv_safe(item.variant),
                     "Inventory Units": (
                         "" if item.inventory_units is None else item.inventory_units
                     ),
@@ -167,21 +226,51 @@ class InventoryService:
         )
 
 
+def build_inventory_filters(
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    location_ids: list[str] | None = None,
+    vendors: list[str] | None = None,
+    collection_ids: list[str] | None = None,
+    inventory_tracked: bool | None = None,
+    inventory_statuses: list[str] | None = None,
+) -> InventoryFilters:
+    """Validate API query values and build the repository filter contract."""
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start_date must be on or before end_date.")
+    if start_date or end_date:
+        raise ValueError(INVENTORY_HISTORY_UNAVAILABLE_MESSAGE)
+
+    cleaned_collections = _clean_filter_values(collection_ids)
+    if cleaned_collections:
+        raise ValueError(COLLECTION_UNAVAILABLE_MESSAGE)
+
+    cleaned_statuses = _clean_filter_values(inventory_statuses)
+    supported_statuses = set(INVENTORY_STATUS_LABELS)
+    unsupported_statuses = sorted(set(cleaned_statuses) - supported_statuses)
+    if unsupported_statuses:
+        raise ValueError(
+            "Unsupported inventory status: " + ", ".join(unsupported_statuses)
+        )
+
+    return InventoryFilters(
+        location_ids=_clean_filter_values(location_ids),
+        vendors=_clean_filter_values(vendors),
+        inventory_tracked=inventory_tracked,
+        inventory_statuses=cleaned_statuses,
+    )
+
+
 def _round_one_decimal(value: Decimal) -> float:
     return float(value.quantize(ONE_DECIMAL, rounding=ROUND_HALF_UP))
 
 
-def _format_variant_name(
-    product_title: str | None,
-    variant_title: str | None,
-) -> str:
-    product = _clean_text(product_title)
+def _format_variant_name(variant_title: str | None) -> str:
     variant = _clean_text(variant_title)
     if variant and variant.casefold() == "default title":
-        variant = None
-    if product and variant:
-        return f"{product} / {variant}"
-    return product or variant or "Unnamed variant"
+        return "Default"
+    return variant or "Unnamed variant"
 
 
 def _first_non_empty(*values: str | None) -> str | None:
@@ -197,6 +286,15 @@ def _clean_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _clean_filter_values(values: list[str] | None) -> tuple[str, ...]:
+    cleaned = {
+        value.strip()
+        for value in (values or [])
+        if value is not None and value.strip()
+    }
+    return tuple(sorted(cleaned, key=str.casefold))
 
 
 def _inventory_status(

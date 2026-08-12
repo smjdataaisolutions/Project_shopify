@@ -1,8 +1,9 @@
+import unittest
 import csv
 import io
-import unittest
 
 from app.repositories.inventory_repository import (
+    InventoryFilters,
     InventoryTableResult,
     InventoryTableRow,
 )
@@ -16,16 +17,26 @@ class StubInventoryTableRepository:
         self.total_inventory_units = total_inventory_units
         self.call = None
 
-    def get_inventory_table(self, page, page_size, sort_order="asc"):
-        self.call = (page, page_size, sort_order)
+    def get_inventory_table(
+        self, page, page_size, sort_order, filters, low_stock_threshold
+    ):
+        self.call = (
+            page,
+            page_size,
+            sort_order,
+            filters,
+            low_stock_threshold,
+        )
         return InventoryTableResult(
             self.rows,
             self.total_items,
             self.total_inventory_units,
         )
 
-    def get_inventory_table_export(self, sort_order="asc"):
-        self.call = (sort_order,)
+    def get_inventory_table_export(
+        self, sort_order, filters, low_stock_threshold
+    ):
+        self.call = (sort_order, filters, low_stock_threshold)
         return self.rows
 
 
@@ -67,15 +78,18 @@ class InventoryTableServiceTests(unittest.TestCase):
             ]
         )
 
-        export = InventoryService(repository, 10).get_inventory_table_export("desc")
+        export = InventoryService(repository, 10).get_inventory_table_export(
+            "desc"
+        )
         records = list(csv.DictReader(io.StringIO(export.content)))
 
-        self.assertEqual(repository.call, ("desc",))
+        self.assertEqual(repository.call, ("desc", InventoryFilters(), 10))
         self.assertEqual(export.filename, "inventory-details.csv")
         self.assertEqual(
             list(records[0]),
             [
-                "Product Variant Name",
+                "Product",
+                "Variant",
                 "Inventory Units",
                 "Inventory Status",
                 "Location",
@@ -103,9 +117,14 @@ class InventoryTableServiceTests(unittest.TestCase):
 
         response = InventoryService(repository, 10).get_inventory_table(2, 25)
 
-        self.assertEqual(repository.call, (2, 25, "asc"))
-        self.assertEqual(response.items[0].product_variant_name, "Classic T-Shirt / Small")
-        self.assertEqual(response.items[1].product_variant_name, "Classic T-Shirt")
+        self.assertEqual(
+            repository.call,
+            (2, 25, "asc", InventoryFilters(), 10),
+        )
+        self.assertEqual(response.items[0].product, "Classic T-Shirt")
+        self.assertEqual(response.items[0].variant, "Small")
+        self.assertEqual(response.items[1].product, "Classic T-Shirt")
+        self.assertEqual(response.items[1].variant, "Default")
         self.assertEqual(response.items[1].location, "Stored Warehouse")
         self.assertEqual(response.pagination.total_pages, 2)
         self.assertEqual(response.totals.total_inventory_units, 125)
@@ -155,7 +174,8 @@ class InventoryTableServiceTests(unittest.TestCase):
             10,
         ).get_inventory_table(1, 25)
 
-        self.assertEqual(response.items[0].product_variant_name, "Unnamed variant")
+        self.assertEqual(response.items[0].product, "Unnamed product")
+        self.assertEqual(response.items[0].variant, "Unnamed variant")
         self.assertIsNone(response.items[0].location)
         self.assertFalse(response.items[0].inventory_tracked)
         self.assertEqual(response.items[0].inventory_status, "untracked")
