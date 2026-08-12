@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -25,9 +26,30 @@ class ProductVariant(Base):
     product_id: Mapped[str | None] = mapped_column(
         ForeignKey("products.id"), index=True, nullable=True
     )
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
     inventory_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    inventory_item_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
     inventory_tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     product: Mapped[Product | None] = relationship(back_populates="variants")
+
+
+class Location(Base):
+    __tablename__ = "locations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class InventoryLevel(Base):
+    __tablename__ = "inventory"
+
+    inventory_item_id: Mapped[str] = mapped_column(String, primary_key=True)
+    location_id: Mapped[str] = mapped_column(String, primary_key=True)
+    location_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    quantities: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 
 
 class Order(Base):
