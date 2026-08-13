@@ -4,6 +4,8 @@ import { fetchInventoryFilterOptions } from "../../services/inventory";
 import styles from "../dashboard/overviewFilters.module.css";
 
 export const EMPTY_INVENTORY_FILTERS = Object.freeze({
+  productId: null,
+  productTitle: null,
   locationIds: [],
   vendors: [],
   inventoryTracked: null,
@@ -12,6 +14,8 @@ export const EMPTY_INVENTORY_FILTERS = Object.freeze({
 
 function copyFilters(filters) {
   return {
+    productId: filters.productId ?? null,
+    productTitle: filters.productTitle ?? null,
     locationIds: [...(filters.locationIds || [])],
     vendors: [...(filters.vendors || [])],
     inventoryTracked: filters.inventoryTracked ?? null,
@@ -21,7 +25,8 @@ function copyFilters(filters) {
 
 export function hasInventoryFilters(filters) {
   return Boolean(
-    filters.locationIds?.length ||
+    filters.productId ||
+      filters.locationIds?.length ||
       filters.vendors?.length ||
       filters.inventoryTracked !== null ||
       filters.inventoryStatuses?.length,
@@ -114,6 +119,20 @@ export function AppliedInventoryFilters({ filters, options, onChange }) {
     ]),
   );
   const chips = [
+    ...(filters.productId
+      ? [
+          {
+            key: `product:${filters.productId}`,
+            label: `Product: ${filters.productTitle || filters.productId}`,
+            remove: () =>
+              onChange({
+                ...filters,
+                productId: null,
+                productTitle: null,
+              }),
+          },
+        ]
+      : []),
     ...(filters.locationIds || []).map((value) => ({
       key: `location:${value}`,
       label: `Location: ${locationNames.get(value) || value}`,

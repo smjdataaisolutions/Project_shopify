@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_inventory_filters(
+    product_id: list[str] | None = Query(default=None),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     location_id: list[str] | None = Query(default=None),
@@ -32,6 +33,7 @@ def get_inventory_filters(
 ) -> InventoryFilters:
     try:
         return build_inventory_filters(
+            product_ids=product_id,
             start_date=start_date,
             end_date=end_date,
             location_ids=location_id,
@@ -65,6 +67,7 @@ def get_inventory_filter_options(
 
 @router.get("/kpis", response_model=InventoryKpiResponse)
 def get_inventory_kpis(
+    level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -74,7 +77,7 @@ def get_inventory_kpis(
         return InventoryService(
             InventoryRepository(db),
             settings.low_stock_threshold,
-        ).get_kpis(filters)
+        ).get_kpis(filters, level)
     except SQLAlchemyError as error:
         logger.exception("Unable to retrieve inventory KPIs")
         raise HTTPException(
@@ -88,6 +91,7 @@ def get_inventory_table(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     sort_order: Literal["asc", "desc"] = Query(default="asc"),
+    level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -97,7 +101,7 @@ def get_inventory_table(
         return InventoryService(
             InventoryRepository(db),
             settings.low_stock_threshold,
-        ).get_inventory_table(page, page_size, sort_order, filters)
+        ).get_inventory_table(page, page_size, sort_order, filters, level)
     except SQLAlchemyError as error:
         logger.exception("Unable to retrieve the inventory table")
         raise HTTPException(
@@ -109,6 +113,7 @@ def get_inventory_table(
 @router.get("/table/download")
 def download_inventory_table(
     sort_order: Literal["asc", "desc"] = Query(default="asc"),
+    level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -118,7 +123,7 @@ def download_inventory_table(
         export = InventoryService(
             InventoryRepository(db),
             settings.low_stock_threshold,
-        ).get_inventory_table_export(sort_order, filters)
+        ).get_inventory_table_export(sort_order, filters, level)
         return Response(
             content=export.content,
             media_type="text/csv",

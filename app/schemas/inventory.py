@@ -14,10 +14,11 @@ class InventoryKpiResponse(BaseModel):
 
 
 class InventoryTableItem(BaseModel):
-    variant_id: str
+    product_id: str | None
+    variant_id: str | None
     location_id: str | None
     product: str
-    variant: str
+    variant: str | None
     inventory_units: int | None
     location: str | None
     inventory_tracked: bool
@@ -43,6 +44,7 @@ class InventoryTableTotals(BaseModel):
 
 
 class InventoryTableResponse(BaseModel):
+    level: Literal["product", "variant"]
     items: list[InventoryTableItem]
     pagination: InventoryTablePagination
     totals: InventoryTableTotals

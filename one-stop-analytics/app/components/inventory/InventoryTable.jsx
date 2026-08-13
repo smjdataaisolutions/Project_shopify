@@ -28,7 +28,12 @@ function InventoryStatus({ item }) {
   return <s-badge tone={presentation.tone}>{presentation.label}</s-badge>;
 }
 
-export function InventoryTable({ filters }) {
+export function InventoryTable({
+  filters,
+  level = "variant",
+  onProductSelect,
+}) {
+  const isProductLevel = level === "product";
   const [page, setPage] = useState(1);
   const [sortOrder, setSortOrder] = useState("asc");
   const [result, setResult] = useState(null);
@@ -48,6 +53,7 @@ export function InventoryTable({ filters }) {
       pageSize: PAGE_SIZE,
       sortOrder,
       filters,
+      level,
     })
       .then((response) => {
         if (active) setResult(response);
@@ -66,7 +72,7 @@ export function InventoryTable({ filters }) {
     return () => {
       active = false;
     };
-  }, [filters, page, requestVersion, sortOrder]);
+  }, [filters, level, page, requestVersion, sortOrder]);
 
   const toggleInventoryUnitsSort = () => {
     setPage(1);
@@ -79,7 +85,7 @@ export function InventoryTable({ filters }) {
     setDownloadError(null);
     setIsDownloading(true);
     try {
-      await downloadInventoryTableCsv({ sortOrder, filters });
+      await downloadInventoryTableCsv({ sortOrder, filters, level });
     } catch (requestError) {
       setDownloadError(
         requestError.message || "Unable to download inventory details.",
@@ -93,7 +99,11 @@ export function InventoryTable({ filters }) {
     return (
       <s-stack direction="inline" gap="base" alignItems="center">
         <s-spinner accessibilityLabel="Loading inventory details" />
-        <s-text>Retrieving inventory by variant and location.</s-text>
+        <s-text>
+          {isProductLevel
+            ? "Retrieving inventory by product."
+            : "Retrieving inventory by variant and location."}
+        </s-text>
       </s-stack>
     );
   }
@@ -123,7 +133,9 @@ export function InventoryTable({ filters }) {
         <s-text tone="subdued">
           {isFiltered
             ? "Clear or adjust the filters to see inventory records."
-            : "Variant and location inventory will appear after Shopify inventory is synchronized."}
+            : isProductLevel
+              ? "Product inventory will appear after Shopify inventory is synchronized."
+              : "Variant and location inventory will appear after Shopify inventory is synchronized."}
         </s-text>
       </s-stack>
     );
@@ -163,7 +175,9 @@ export function InventoryTable({ filters }) {
           <s-table-header listSlot="primary">
             Product
           </s-table-header>
-          <s-table-header listSlot="secondary">Variant</s-table-header>
+          {!isProductLevel ? (
+            <s-table-header listSlot="secondary">Variant</s-table-header>
+          ) : null}
           <s-table-header listSlot="labeled" format="base">
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-text>Inventory Units</s-text>
@@ -180,44 +194,67 @@ export function InventoryTable({ filters }) {
           <s-table-header listSlot="labeled">
             Inventory Status
           </s-table-header>
-          <s-table-header listSlot="secondary">Location</s-table-header>
+          {!isProductLevel ? (
+            <s-table-header listSlot="secondary">Location</s-table-header>
+          ) : null}
         </s-table-header-row>
         <s-table-body>
           {result.items.map((item) => (
             <s-table-row
-              key={`${item.variant_id}:${item.location_id || "unassigned"}`}
+              key={
+                isProductLevel
+                  ? item.product_id
+                  : `${item.variant_id}:${item.location_id || "unassigned"}`
+              }
             >
-              <s-table-cell>{item.product}</s-table-cell>
-              <s-table-cell>{item.variant}</s-table-cell>
+              <s-table-cell>
+                {item.product_id && onProductSelect ? (
+                  <button
+                    type="button"
+                    className={styles.productLink}
+                    onClick={() => onProductSelect(item)}
+                    aria-label={`View variants for ${item.product}`}
+                  >
+                    {item.product}
+                  </button>
+                ) : (
+                  item.product
+                )}
+              </s-table-cell>
+              {!isProductLevel ? (
+                <s-table-cell>{item.variant}</s-table-cell>
+              ) : null}
               <s-table-cell>
                 {item.inventory_units == null
-                  ? "\u2014"
+                  ? "—"
                   : numberFormatter.format(item.inventory_units)}
               </s-table-cell>
               <s-table-cell>
                 <InventoryStatus item={item} />
               </s-table-cell>
-              <s-table-cell>{item.location || "Not assigned"}</s-table-cell>
+              {!isProductLevel ? (
+                <s-table-cell>{item.location || "Not assigned"}</s-table-cell>
+              ) : null}
             </s-table-row>
           ))}
           <s-table-row>
             <s-table-cell>
               <strong>Total inventory units</strong>
             </s-table-cell>
-            <s-table-cell>{"\u2014"}</s-table-cell>
+            {!isProductLevel ? <s-table-cell>-</s-table-cell> : null}
             <s-table-cell>
               <strong>
                 {numberFormatter.format(result.totals.total_inventory_units)}
               </strong>
             </s-table-cell>
-            <s-table-cell>{"\u2014"}</s-table-cell>
-            <s-table-cell>{"\u2014"}</s-table-cell>
+            <s-table-cell>-</s-table-cell>
+            {!isProductLevel ? <s-table-cell>-</s-table-cell> : null}
           </s-table-row>
         </s-table-body>
       </s-table>
       <div className={styles.paginationSummary}>
         <s-text tone="subdued">
-          Page {pagination.page} of {pagination.total_pages} {"\u00b7"}{" "}
+          Page {pagination.page} of {pagination.total_pages} ·{" "}
           {numberFormatter.format(pagination.total_items)} inventory records
         </s-text>
       </div>

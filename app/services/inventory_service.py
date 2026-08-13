@@ -26,12 +26,17 @@ from app.schemas.inventory import (
 
 SALES_WINDOW_DAYS = 30
 ONE_DECIMAL = Decimal("0.1")
-INVENTORY_CSV_COLUMNS = (
+VARIANT_INVENTORY_CSV_COLUMNS = (
     "Product",
     "Variant",
     "Inventory Units",
     "Inventory Status",
     "Location",
+)
+PRODUCT_INVENTORY_CSV_COLUMNS = (
+    "Product",
+    "Inventory Units",
+    "Inventory Status",
 )
 INVENTORY_STATUS_LABELS = {
     "healthy": "In stock",
@@ -100,6 +105,7 @@ class InventoryService:
     def get_kpis(
         self,
         filters: InventoryFilters = InventoryFilters(),
+        level: str = "variant",
     ) -> InventoryKpiResponse:
         end_date = self.today()
         start_date = end_date - timedelta(days=SALES_WINDOW_DAYS - 1)
@@ -108,6 +114,7 @@ class InventoryService:
             end_date,
             self.low_stock_threshold,
             filters,
+            level,
         )
 
         inventory_units = Decimal(inputs.total_inventory_units)
@@ -142,6 +149,7 @@ class InventoryService:
         page_size: int,
         sort_order: str = "asc",
         filters: InventoryFilters = InventoryFilters(),
+        level: str = "variant",
     ) -> InventoryTableResponse:
         result = self.repository.get_inventory_table(
             page,
@@ -149,6 +157,7 @@ class InventoryService:
             sort_order,
             filters,
             self.low_stock_threshold,
+            level,
         )
         total_pages = (
             (result.total_items + page_size - 1) // page_size
@@ -156,7 +165,8 @@ class InventoryService:
             else 0
         )
         return InventoryTableResponse(
-            items=[self._build_table_item(row) for row in result.rows],
+            level=level,
+            items=[self._build_table_item(row, level) for row in result.rows],
             pagination=InventoryTablePagination(
                 page=page,
                 page_size=page_size,
@@ -168,17 +178,30 @@ class InventoryService:
             ),
         )
 
-    def _build_table_item(self, row: InventoryTableRow) -> InventoryTableItem:
+    def _build_table_item(
+        self,
+        row: InventoryTableRow,
+        level: str = "variant",
+    ) -> InventoryTableItem:
         tracked = row.inventory_tracked is True
         return InventoryTableItem(
+            product_id=row.product_id,
             variant_id=row.variant_id,
             location_id=row.location_id,
             product=_clean_text(row.product_title) or "Unnamed product",
-            variant=_format_variant_name(row.variant_title),
+            variant=(
+                None
+                if level == "product"
+                else _format_variant_name(row.variant_title)
+            ),
             inventory_units=row.inventory_units,
-            location=_first_non_empty(
-                row.location_name,
-                row.inventory_location_name,
+            location=(
+                None
+                if level == "product"
+                else _first_non_empty(
+                    row.location_name,
+                    row.inventory_location_name,
+                )
             ),
             inventory_tracked=tracked,
             inventory_status=_inventory_status(
@@ -192,42 +215,54 @@ class InventoryService:
         self,
         sort_order: str = "asc",
         filters: InventoryFilters = InventoryFilters(),
+        level: str = "variant",
     ) -> InventoryTableCsvExport:
         rows = self.repository.get_inventory_table_export(
             sort_order,
             filters,
             self.low_stock_threshold,
+            level,
         )
         output = io.StringIO(newline="")
+        columns = (
+            PRODUCT_INVENTORY_CSV_COLUMNS
+            if level == "product"
+            else VARIANT_INVENTORY_CSV_COLUMNS
+        )
         writer = csv.DictWriter(
             output,
-            fieldnames=INVENTORY_CSV_COLUMNS,
+            fieldnames=columns,
             lineterminator="\r\n",
         )
         writer.writeheader()
         for row in rows:
-            item = self._build_table_item(row)
-            writer.writerow(
-                {
-                    "Product": _csv_safe(item.product),
-                    "Variant": _csv_safe(item.variant),
-                    "Inventory Units": (
-                        "" if item.inventory_units is None else item.inventory_units
-                    ),
-                    "Inventory Status": INVENTORY_STATUS_LABELS[
-                        item.inventory_status
-                    ],
-                    "Location": _csv_safe(item.location or "Not assigned"),
-                }
-            )
+            item = self._build_table_item(row, level)
+            record = {
+                "Product": _csv_safe(item.product),
+                "Inventory Units": (
+                    "" if item.inventory_units is None else item.inventory_units
+                ),
+                "Inventory Status": INVENTORY_STATUS_LABELS[
+                    item.inventory_status
+                ],
+            }
+            if level == "variant":
+                record["Variant"] = _csv_safe(item.variant or "Unnamed variant")
+                record["Location"] = _csv_safe(item.location or "Not assigned")
+            writer.writerow(record)
         return InventoryTableCsvExport(
-            filename="inventory-details.csv",
+            filename=(
+                "inventory-products.csv"
+                if level == "product"
+                else "inventory-details.csv"
+            ),
             content=output.getvalue(),
         )
 
 
 def build_inventory_filters(
     *,
+    product_ids: list[str] | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     location_ids: list[str] | None = None,
@@ -255,6 +290,7 @@ def build_inventory_filters(
         )
 
     return InventoryFilters(
+        product_ids=_clean_filter_values(product_ids),
         location_ids=_clean_filter_values(location_ids),
         vendors=_clean_filter_values(vendors),
         inventory_tracked=inventory_tracked,

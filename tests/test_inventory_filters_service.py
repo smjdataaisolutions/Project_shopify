@@ -28,6 +28,7 @@ class StubFilterRepository:
 class InventoryFilterServiceTests(unittest.TestCase):
     def test_builds_clean_deduplicated_filter_contract(self):
         filters = build_inventory_filters(
+            product_ids=[" product-2 ", "product-1", "product-1"],
             location_ids=[" location-2 ", "location-1", "location-1"],
             vendors=[" Acme ", "Acme"],
             inventory_tracked=True,
@@ -37,6 +38,7 @@ class InventoryFilterServiceTests(unittest.TestCase):
         self.assertEqual(
             filters,
             InventoryFilters(
+                product_ids=("product-1", "product-2"),
                 location_ids=("location-1", "location-2"),
                 vendors=("Acme",),
                 inventory_tracked=True,

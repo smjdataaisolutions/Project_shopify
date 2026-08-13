@@ -27,42 +27,45 @@ const derivedFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
-function getMetrics(kpis) {
+function getMetrics(kpis, level) {
+  const isProduct = level === "product";
+  const scopeLabel = isProduct ? "products" : "variant-location inventory items";
+
   return [
     {
       id: "total-inventory-units",
       label: "Total inv. units",
       value: countFormatter.format(kpis.total_inventory_units),
       definition: [
-        "Definition: Total sellable units across tracked variant-location inventory items.",
+        `Definition: Total sellable units across tracked ${scopeLabel}.`,
         "Formula: Sum max(available quantity per table row, 0).",
       ],
     },
     {
-      id: "in-stock-products",
-      label: "In-stock inv. items",
+      id: "in-stock-items",
+      label: isProduct ? "In-stock products" : "In-stock inv. items",
       value: countFormatter.format(kpis.in_stock_products),
       definition: [
-        "Definition: Tracked variant-location rows with sellable inventory.",
-        "Formula: Count table rows whose available quantity is greater than 0.",
+        `Definition: Tracked ${scopeLabel} with sellable inventory.`,
+        `Formula: Count ${isProduct ? "products" : "table rows"} whose available quantity is greater than 0.`,
       ],
     },
     {
-      id: "low-stock-products",
-      label: "Low-stock inv. items",
+      id: "low-stock-items",
+      label: isProduct ? "Low-stock products" : "Low-stock inv. items",
       value: countFormatter.format(kpis.low_stock_products),
       definition: [
-        "Definition: Tracked variant-location rows approaching stockout.",
-        "Formula: Count table rows with available quantity from 1 through 10.",
+        `Definition: Tracked ${scopeLabel} approaching stockout.`,
+        `Formula: Count ${isProduct ? "products" : "table rows"} with available quantity from 1 through 10.`,
       ],
     },
     {
-      id: "out-of-stock-products",
-      label: "Out-of-stock inv. items",
+      id: "out-of-stock-items",
+      label: isProduct ? "Out-of-stock products" : "Out-of-stock inv. items",
       value: countFormatter.format(kpis.out_of_stock_products),
       definition: [
-        "Definition: Tracked variant-location rows with no inventory remaining.",
-        "Formula: Count table rows whose available quantity equals 0.",
+        `Definition: Tracked ${scopeLabel} with no inventory remaining.`,
+        `Formula: Count ${isProduct ? "products" : "table rows"} whose available quantity equals 0.`,
       ],
     },
     {
@@ -70,11 +73,11 @@ function getMetrics(kpis) {
       label: "Sell-through rate",
       value:
         kpis.sell_through_rate == null
-          ? "\u2014"
+          ? "—"
           : `${derivedFormatter.format(kpis.sell_through_rate)}%`,
       definition: [
         "Definition: Share of available stock sold during the trailing 30 days.",
-        "Formula: Units sold / (units sold + current inventory) x 100.",
+        "Formula: Units sold ÷ (units sold + current inventory) × 100.",
       ],
     },
   ];
@@ -117,6 +120,7 @@ function InventoryKpiCard({ id, label, value, definition }) {
 }
 
 export default function Inventory() {
+  const [inventoryLevel, setInventoryLevel] = useState("variant");
   const [areFiltersCollapsed, setAreFiltersCollapsed] = useState(false);
   const [filters, setFilters] = useState(() => ({
     ...EMPTY_INVENTORY_FILTERS,
@@ -136,7 +140,7 @@ export default function Inventory() {
     setError(null);
     setKpis(null);
 
-    fetchInventoryKpis(filters)
+    fetchInventoryKpis(filters, inventoryLevel)
       .then((response) => {
         if (active) setKpis(response);
       })
@@ -154,12 +158,12 @@ export default function Inventory() {
     return () => {
       active = false;
     };
-  }, [filters, requestVersion]);
+  }, [filters, inventoryLevel, requestVersion]);
 
   const hasInventoryData =
     kpis && kpis.in_stock_products + kpis.out_of_stock_products > 0;
   const hasAppliedFilters = hasInventoryFilters(filters);
-  const filterKey = JSON.stringify(filters);
+  const filterKey = `${inventoryLevel}:${JSON.stringify(filters)}`;
   const latestInventorySync = filterOptions?.date_range
     ?.latest_inventory_sync_at
     ? new Intl.DateTimeFormat("en-US", {
@@ -168,9 +172,56 @@ export default function Inventory() {
       }).format(new Date(filterOptions.date_range.latest_inventory_sync_at))
     : null;
 
+  const showProductView = () => {
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      productId: null,
+      productTitle: null,
+    }));
+    setInventoryLevel("product");
+  };
+
+  const drillDownToProductVariants = (product) => {
+    if (!product.product_id) return;
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      productId: product.product_id,
+      productTitle: product.product,
+    }));
+    setInventoryLevel("variant");
+  };
+
   return (
     <s-page heading="Inventory" inlineSize="large">
       <AnalyticsTopNavigation />
+
+      <div
+        className={`${styles.inventoryViewSwitcher} ${
+          areFiltersCollapsed ? styles.inventoryViewSwitcherCollapsed : ""
+        }`}
+      >
+        <div className={styles.inventoryViewButtons}>
+          <s-button
+            variant={inventoryLevel === "product" ? "primary" : "secondary"}
+            onClick={showProductView}
+          >
+            Product
+          </s-button>
+          <s-button
+            variant={inventoryLevel === "variant" ? "primary" : "secondary"}
+            onClick={() => setInventoryLevel("variant")}
+          >
+            Variant
+          </s-button>
+        </div>
+        <div className={styles.appliedInventoryFilters}>
+          <AppliedInventoryFilters
+            filters={filters}
+            options={filterOptions}
+            onChange={setFilters}
+          />
+        </div>
+      </div>
 
       <div
         className={`${styles.overviewLayout} ${
@@ -200,22 +251,6 @@ export default function Inventory() {
         ) : null}
 
         <div className={styles.overviewContent}>
-          <div className={styles.inventoryContextRow}>
-            <AppliedInventoryFilters
-              filters={filters}
-              options={filterOptions}
-              onChange={setFilters}
-            />
-
-            {latestInventorySync ? (
-              <div className={styles.inventoryAsOf}>
-                <s-text tone="subdued">
-                  Inventory as of {latestInventorySync}
-                </s-text>
-              </div>
-            ) : null}
-          </div>
-
           {isLoading && !kpis ? (
             <s-section heading="Loading inventory">
               <s-stack direction="inline" gap="base" alignItems="center">
@@ -239,8 +274,16 @@ export default function Inventory() {
           ) : null}
 
           {kpis && !hasInventoryData ? (
-            <s-section heading="Inventory overview">
+            <s-section accessibilityLabel="Inventory overview">
               <s-stack direction="block" gap="small">
+                <div className={styles.inventoryContextRow}>
+                  <s-heading>Inventory overview</s-heading>
+                  {latestInventorySync ? (
+                    <s-text tone="subdued">
+                      Inventory as of {latestInventorySync}
+                    </s-text>
+                  ) : null}
+                </div>
                 <s-heading>
                   {hasAppliedFilters
                     ? "No inventory matches the applied filters"
@@ -256,9 +299,21 @@ export default function Inventory() {
           ) : null}
 
           {hasInventoryData ? (
-            <s-section heading="Inventory overview">
+            <s-section accessibilityLabel="Inventory overview">
+              <div className={styles.inventoryContextRow}>
+                <div>
+                  <s-heading>Inventory overview</s-heading>
+                </div>
+                {latestInventorySync ? (
+                  <div className={styles.inventoryAsOf}>
+                    <s-text tone="subdued">
+                      Inventory as of {latestInventorySync}
+                    </s-text>
+                  </div>
+                ) : null}
+              </div>
               <div className={styles.grid}>
-                {getMetrics(kpis).map((metric) => (
+                {getMetrics(kpis, inventoryLevel).map((metric) => (
                   <InventoryKpiCard key={metric.id} {...metric} />
                 ))}
               </div>
@@ -266,7 +321,12 @@ export default function Inventory() {
           ) : null}
 
           <s-section accessibilityLabel="Inventory details">
-            <InventoryTable key={filterKey} filters={filters} />
+            <InventoryTable
+              key={filterKey}
+              filters={filters}
+              level={inventoryLevel}
+              onProductSelect={drillDownToProductVariants}
+            />
           </s-section>
         </div>
       </div>
