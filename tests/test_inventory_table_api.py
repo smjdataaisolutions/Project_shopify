@@ -34,7 +34,11 @@ class InventoryTableApiTests(unittest.TestCase):
             settings=SimpleNamespace(low_stock_threshold=10),
         )
 
-        get_export.assert_called_once_with("desc", InventoryFilters())
+        get_export.assert_called_once_with(
+            "desc",
+            InventoryFilters(),
+            "variant",
+        )
         self.assertTrue(response.media_type.startswith("text/csv"))
         self.assertIn("attachment;", response.headers["content-disposition"])
         self.assertIn(b"Shirt,Small,18", response.body)
@@ -67,13 +71,22 @@ class InventoryTableApiTests(unittest.TestCase):
             settings=SimpleNamespace(low_stock_threshold=10),
         )
 
-        get_table.assert_called_once_with(1, 25, "desc", InventoryFilters(), 10)
+        get_table.assert_called_once_with(
+            1,
+            25,
+            "desc",
+            InventoryFilters(),
+            10,
+            "variant",
+        )
 
         self.assertEqual(
             response.model_dump(),
             {
+                "level": "variant",
                 "items": [
                     {
+                        "product_id": None,
                         "variant_id": "variant-1",
                         "location_id": "location-1",
                         "product": "Classic T-Shirt",

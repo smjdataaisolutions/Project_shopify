@@ -3,7 +3,7 @@ import unittest
 
 from sqlalchemy.dialects import postgresql
 
-from app.repositories.inventory_repository import InventoryRepository
+from app.repositories.inventory_repository import InventoryFilters, InventoryRepository
 
 
 def compile_sql(statement) -> str:
@@ -16,6 +16,21 @@ def compile_sql(statement) -> str:
 
 
 class InventoryRepositoryTests(unittest.TestCase):
+    def test_product_query_aggregates_then_applies_inventory_status(self):
+        statement = InventoryRepository._inventory_table_base_statement(
+            InventoryFilters(inventory_statuses=("low_stock",)),
+            10,
+            "product",
+        )
+        sql = compile_sql(statement)
+
+        self.assertIn("GROUP BY", sql)
+        self.assertIn("product_id", sql)
+        self.assertIn("sum(", sql)
+        self.assertIn("inventory_tracked", sql)
+        self.assertIn("low_stock", sql)
+        self.assertIn("NULL AS variant_title", sql)
+
     def test_inventory_query_counts_tracked_variant_location_items(self):
         sql = compile_sql(InventoryRepository._inventory_metrics_statement(10))
 

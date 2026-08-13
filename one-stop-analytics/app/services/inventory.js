@@ -6,6 +6,7 @@ const INVENTORY_FILTER_OPTIONS_ENDPOINT =
   "/api/analytics/inventory/filter-options";
 
 function appendInventoryFilters(query, filters = {}) {
+  if (filters.productId) query.append("product_id", filters.productId);
   (filters.locationIds || []).forEach((value) =>
     query.append("location_id", value),
   );
@@ -31,8 +32,9 @@ export async function fetchInventoryFilterOptions() {
   return response.json();
 }
 
-export async function fetchInventoryKpis(filters = {}) {
+export async function fetchInventoryKpis(filters = {}, level = "variant") {
   const query = appendInventoryFilters(new URLSearchParams(), filters);
+  query.set("level", level);
   const response = await fetch(`${INVENTORY_KPIS_ENDPOINT}?${query}`, {
     headers: { Accept: "application/json" },
   });
@@ -49,12 +51,14 @@ export async function fetchInventoryTable({
   pageSize = 25,
   sortOrder = "asc",
   filters = {},
+  level = "variant",
 } = {}) {
   const query = appendInventoryFilters(
     new URLSearchParams({
       page: String(page),
       page_size: String(pageSize),
       sort_order: sortOrder,
+      level,
     }),
     filters,
   );
@@ -72,13 +76,14 @@ export async function fetchInventoryTable({
 export async function downloadInventoryTableCsv({
   sortOrder = "asc",
   filters = {},
+  level = "variant",
 } = {}) {
   const query = appendInventoryFilters(
-    new URLSearchParams({ sort_order: sortOrder }),
+    new URLSearchParams({ sort_order: sortOrder, level }),
     filters,
   );
   await downloadCsv(
     `${INVENTORY_TABLE_ENDPOINT}/download?${query}`,
-    "inventory-details.csv",
+    level === "product" ? "inventory-products.csv" : "inventory-details.csv",
   );
 }

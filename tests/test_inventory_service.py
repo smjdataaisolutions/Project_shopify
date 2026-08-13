@@ -10,8 +10,10 @@ class StubInventoryRepository:
         self.inputs = inputs
         self.call = None
 
-    def get_kpi_inputs(self, start_date, end_date, low_stock_threshold, filters):
-        self.call = (start_date, end_date, low_stock_threshold, filters)
+    def get_kpi_inputs(
+        self, start_date, end_date, low_stock_threshold, filters, level
+    ):
+        self.call = (start_date, end_date, low_stock_threshold, filters, level)
         return self.inputs
 
 
@@ -38,7 +40,13 @@ class InventoryServiceTests(unittest.TestCase):
         self.assertEqual(response.days_of_inventory_remaining, 14.1)
         self.assertEqual(
             repository.call,
-            (date(2026, 7, 13), date(2026, 8, 11), 10, InventoryFilters()),
+            (
+                date(2026, 7, 13),
+                date(2026, 8, 11),
+                10,
+                InventoryFilters(),
+                "variant",
+            ),
         )
 
     def test_no_sales_returns_zero_sell_through_and_unknown_days(self):

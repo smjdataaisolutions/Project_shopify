@@ -1,3 +1,26 @@
+.productLink {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #005bd3;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.125rem;
+}
+
+.productLink:hover {
+  color: #004299;
+}
+
+.productLink:focus-visible {
+  border-radius: 0.125rem;
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+
 .paginationSummary {
   position: relative;
   z-index: 1;

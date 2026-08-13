@@ -18,7 +18,7 @@ class StubInventoryTableRepository:
         self.call = None
 
     def get_inventory_table(
-        self, page, page_size, sort_order, filters, low_stock_threshold
+        self, page, page_size, sort_order, filters, low_stock_threshold, level
     ):
         self.call = (
             page,
@@ -26,6 +26,7 @@ class StubInventoryTableRepository:
             sort_order,
             filters,
             low_stock_threshold,
+            level,
         )
         return InventoryTableResult(
             self.rows,
@@ -34,14 +35,15 @@ class StubInventoryTableRepository:
         )
 
     def get_inventory_table_export(
-        self, sort_order, filters, low_stock_threshold
+        self, sort_order, filters, low_stock_threshold, level
     ):
-        self.call = (sort_order, filters, low_stock_threshold)
+        self.call = (sort_order, filters, low_stock_threshold, level)
         return self.rows
 
 
 def make_row(
     *,
+    product_id="product-1",
     variant_id="variant-1",
     location_id="location-1",
     product_title="Classic T-Shirt",
@@ -60,10 +62,38 @@ def make_row(
         location_name=location_name,
         inventory_location_name=inventory_location_name,
         inventory_tracked=inventory_tracked,
+        product_id=product_id,
     )
 
 
 class InventoryTableServiceTests(unittest.TestCase):
+    def test_product_level_returns_product_only_rows_and_export(self):
+        repository = StubInventoryTableRepository(
+            [make_row(variant_id=None, location_id=None, inventory_units=28)],
+            total_inventory_units=28,
+        )
+        service = InventoryService(repository, 10)
+
+        response = service.get_inventory_table(1, 25, level="product")
+
+        self.assertEqual(response.level, "product")
+        self.assertEqual(response.items[0].product_id, "product-1")
+        self.assertIsNone(response.items[0].variant_id)
+        self.assertIsNone(response.items[0].variant)
+        self.assertIsNone(response.items[0].location)
+        self.assertEqual(
+            repository.call,
+            (1, 25, "asc", InventoryFilters(), 10, "product"),
+        )
+
+        export = service.get_inventory_table_export(level="product")
+        records = list(csv.DictReader(io.StringIO(export.content)))
+        self.assertEqual(export.filename, "inventory-products.csv")
+        self.assertEqual(
+            list(records[0]),
+            ["Product", "Inventory Units", "Inventory Status"],
+        )
+
     def test_exports_all_displayed_columns_in_requested_order(self):
         repository = StubInventoryTableRepository(
             [
@@ -83,7 +113,10 @@ class InventoryTableServiceTests(unittest.TestCase):
         )
         records = list(csv.DictReader(io.StringIO(export.content)))
 
-        self.assertEqual(repository.call, ("desc", InventoryFilters(), 10))
+        self.assertEqual(
+            repository.call,
+            ("desc", InventoryFilters(), 10, "variant"),
+        )
         self.assertEqual(export.filename, "inventory-details.csv")
         self.assertEqual(
             list(records[0]),
@@ -119,7 +152,7 @@ class InventoryTableServiceTests(unittest.TestCase):
 
         self.assertEqual(
             repository.call,
-            (2, 25, "asc", InventoryFilters(), 10),
+            (2, 25, "asc", InventoryFilters(), 10, "variant"),
         )
         self.assertEqual(response.items[0].product, "Classic T-Shirt")
         self.assertEqual(response.items[0].variant, "Small")

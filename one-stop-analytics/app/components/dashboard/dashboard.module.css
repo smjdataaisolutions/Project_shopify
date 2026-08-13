@@ -25,12 +25,35 @@
   min-width: 0;
 }
 
+.inventoryViewSwitcher {
+  display: grid;
+  grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+  margin-block: 0.5rem;
+}
+
+.inventoryViewSwitcherCollapsed {
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+}
+
+.inventoryViewButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.appliedInventoryFilters {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .inventoryContextRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem 1rem;
+  margin-block-end: 1rem;
 }
 
 .inventoryAsOf {
@@ -39,6 +62,11 @@
 }
 
 @media (max-width: 768px) {
+  .inventoryViewSwitcher,
+  .inventoryViewSwitcherCollapsed {
+    grid-template-columns: 1fr;
+  }
+
   .overviewLayout {
     grid-template-columns: 1fr;
   }

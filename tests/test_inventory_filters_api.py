@@ -15,6 +15,7 @@ from app.services.inventory_service import INVENTORY_HISTORY_UNAVAILABLE_MESSAGE
 class InventoryFilterApiTests(unittest.TestCase):
     def test_dependency_maps_repeated_query_values(self):
         filters = get_inventory_filters(
+            product_id=["product-1"],
             start_date=None,
             end_date=None,
             location_id=["location-1", "location-2"],
@@ -27,6 +28,7 @@ class InventoryFilterApiTests(unittest.TestCase):
         self.assertEqual(
             filters,
             InventoryFilters(
+                product_ids=("product-1",),
                 location_ids=("location-1", "location-2"),
                 vendors=("Acme",),
                 inventory_tracked=False,
@@ -37,6 +39,7 @@ class InventoryFilterApiTests(unittest.TestCase):
     def test_dependency_returns_422_for_unavailable_history(self):
         with self.assertRaises(HTTPException) as context:
             get_inventory_filters(
+                product_id=None,
                 start_date=date(2026, 8, 1),
                 end_date=None,
                 location_id=None,
