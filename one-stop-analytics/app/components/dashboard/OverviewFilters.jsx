@@ -12,15 +12,21 @@ function FilterOption({ label, selected, onClick }) {
       aria-pressed={selected}
       onClick={onClick}
     >
-      <span>{label}</span>
+      <span className={styles.optionText}>
+        <span className={styles.optionLabel}>{label}</span>
+      </span>
       <span className={styles.check} aria-hidden="true">
-        {selected ? "✓" : ""}
+        {selected ? "âœ“" : ""}
       </span>
     </button>
   );
 }
 
-function CollapsibleFilterSection({ title, children, defaultExpanded = false }) {
+function CollapsibleFilterSection({
+  title,
+  children,
+  defaultExpanded = false,
+}) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const contentId = useId();
 
@@ -84,7 +90,12 @@ function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
   );
 }
 
-export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) {
+export function OverviewFilters({
+  filters,
+  onChange,
+  isCollapsed,
+  onCollapse,
+}) {
   const [options, setOptions] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -100,7 +111,9 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
           setError(requestError.message || "Unable to load filter options.");
         }
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [requestVersion]);
 
   const clearAll = () => {
@@ -121,12 +134,19 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
       aria-label="Store performance filters"
       aria-hidden={isCollapsed}
     >
-      <s-box padding="base" borderWidth="base" borderRadius="base" background="base">
+      <s-box
+        padding="base"
+        borderWidth="base"
+        borderRadius="base"
+        background="base"
+      >
         <s-stack direction="block" gap="small">
           <div className={styles.header}>
             <s-heading>Filters</s-heading>
             <div className={styles.headerActions}>
-              <s-button variant="tertiary" onClick={clearAll}>Clear all</s-button>
+              <s-button variant="tertiary" onClick={clearAll}>
+                Clear all
+              </s-button>
               <s-button
                 icon="chevron-left"
                 variant="tertiary"
@@ -162,7 +182,7 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
           {!options && !error ? (
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-spinner accessibilityLabel="Loading filter options" />
-              <s-text>Loading filters…</s-text>
+              <s-text>Loading filtersâ€¦</s-text>
             </s-stack>
           ) : null}
 
@@ -180,18 +200,21 @@ export function OverviewFilters({ filters, onChange, isCollapsed, onCollapse }) 
                 heading="Order status"
                 options={options.order_statuses}
                 selectedValues={filters.orderStatuses}
-                onChange={(orderStatuses) => onChange({ ...filters, orderStatuses })}
+                onChange={(orderStatuses) =>
+                  onChange({ ...filters, orderStatuses })
+                }
               />
               <MultiSelectGroup
                 heading="Fulfillment status"
                 options={options.fulfillment_statuses}
                 selectedValues={filters.fulfillmentStatuses}
-                onChange={(fulfillmentStatuses) => onChange({
-                  ...filters,
-                  fulfillmentStatuses,
-                })}
+                onChange={(fulfillmentStatuses) =>
+                  onChange({
+                    ...filters,
+                    fulfillmentStatuses,
+                  })
+                }
               />
-
             </>
           ) : null}
         </s-stack>

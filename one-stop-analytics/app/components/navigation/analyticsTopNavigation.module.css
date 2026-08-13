@@ -1,7 +1,20 @@
 .navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
   margin-block-start: -1.5rem;
   padding-block: 0.25rem;
   border-bottom: 1px solid #e1e3e5;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .links {
@@ -44,7 +57,14 @@
 
 @media (max-width: 640px) {
   .navigation {
+    align-items: flex-start;
+    flex-direction: column;
     margin-block-start: -1rem;
+  }
+
+  .actions {
+    justify-content: flex-start;
+    margin-left: 0;
   }
 
   .links {

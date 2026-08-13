@@ -1,9 +1,23 @@
 /* eslint-disable react/prop-types */
+import styles from "./kpiCard.module.css";
 
-/**
- * A small, consistent presentation component for dashboard metrics.
- */
-export function KPICard({ label, value }) {
+/** A dashboard metric with optional navigation and an accessible formula tooltip. */
+export function KPICard({
+  id,
+  label,
+  value,
+  definition = [],
+  onClick,
+  accessibilityLabel,
+}) {
+  const tooltipId = `${id || label.toLowerCase().replaceAll(" ", "-")}-formula`;
+  const content = (
+    <s-stack direction="block" gap="small">
+      <s-text tone="subdued">{label}</s-text>
+      <s-heading>{value}</s-heading>
+    </s-stack>
+  );
+
   return (
     <s-box
       padding="base"
@@ -11,10 +25,34 @@ export function KPICard({ label, value }) {
       borderRadius="base"
       background="base"
     >
-      <s-stack direction="block" gap="small">
-        <s-text tone="subdued">{label}</s-text>
-        <s-heading>{value}</s-heading>
-      </s-stack>
+      <div className={styles.cardShell}>
+        {onClick ? (
+          <button
+            type="button"
+            className={styles.cardButton}
+            onClick={onClick}
+            aria-label={accessibilityLabel || `Open details for ${label}`}
+          >
+            {content}
+          </button>
+        ) : content}
+
+        {definition.length ? (
+          <div className={styles.infoButton}>
+            <s-button
+              icon="info"
+              variant="tertiary"
+              accessibilityLabel={`How ${label.toLowerCase()} is calculated`}
+              interestFor={tooltipId}
+            />
+            <s-tooltip id={tooltipId}>
+              {definition.map((line) => (
+                <s-paragraph key={line}>{line}</s-paragraph>
+              ))}
+            </s-tooltip>
+          </div>
+        ) : null}
+      </div>
     </s-box>
   );
 }

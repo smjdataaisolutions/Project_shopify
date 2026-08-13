@@ -96,3 +96,12 @@ class OrderLineItem(Base):
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     currency_code: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class ShopifySyncState(Base):
+    __tablename__ = "shopify_sync_state"
+
+    source: Mapped[str] = mapped_column(String, primary_key=True)
+    last_successful_sync_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

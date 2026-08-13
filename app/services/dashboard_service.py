@@ -1,62 +1,101 @@
 import csv
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import io
+from collections.abc import Callable
 
 from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
     AffectedProduct,
     ActionNeededItem,
     ActionNeededResponse,
-    BusinessHighlight,
     BusinessHighlightsResponse,
+    ComparisonPeriodMetrics,
     DashboardSummary,
-    InventoryHealthHighlight,
-    InventoryHighlightMetrics,
+    DailyStorePerformanceItem,
+    DailyStorePerformancePagination,
+    DailyStorePerformanceResponse,
+    DailyStorePerformanceSummary,
+    InventoryExposureHighlight,
+    InventoryExposureProduct,
+    LastSevenDaysOrderItem,
+    LastSevenDaysOrders,
+    LastSevenDaysPerformanceResponse,
+    LastSevenDaysPeriod,
+    LastSevenDaysProductItem,
+    LastSevenDaysSalesComparison,
+    LastSevenDaysTopProducts,
     OverviewFilterOptionsResponse,
     SalesChannelFilterOption,
-    SalesHighlightMetrics,
-    SalesPerformanceHighlight,
-    TopProductHighlightMetrics,
-    TopSellingProductHighlight,
+    ProductConcentrationProduct,
+    ProductSalesConcentrationHighlight,
+    SalesMomentumHighlight,
 )
 from app.services.sales_channel_service import group_sales_channels
 
 
 MAX_ACTIONS = 5
+SALES_MOMENTUM_CHANGE_THRESHOLD = Decimal("5")
+HIGH_PRODUCT_CONCENTRATION_THRESHOLD = Decimal("50")
+MODERATE_PRODUCT_CONCENTRATION_THRESHOLD = Decimal("30")
 ACTION_PRIORITY_ORDER = {"critical": 0, "warning": 1, "recommendation": 2}
 INVENTORY_CSV_COLUMNS = (
-    "product_id", "affected_product_name", "variant_title", "sku",
-    "inventory_quantity", "location_name", "units_sold", "issue_type",
+    "product_id",
+    "affected_product_name",
+    "variant_title",
+    "sku",
+    "inventory_quantity",
+    "location_name",
+    "units_sold",
+    "issue_type",
     "issue_value",
 )
 ORDER_CSV_COLUMNS = (
-    "order_id", "order_number", "product_name", "financial_status",
-    "fulfillment_status", "order_amount", "issue_type", "issue_value",
+    "order_id",
+    "order_number",
+    "product_name",
+    "financial_status",
+    "fulfillment_status",
+    "order_amount",
+    "issue_type",
+    "issue_value",
 )
 SALES_CSV_COLUMNS = (
-    "order_id", "product_name", "units", "gross_sales", "discount_amount",
-    "net_sales", "issue_type", "issue_value",
+    "order_id",
+    "product_name",
+    "units",
+    "gross_sales",
+    "discount_amount",
+    "net_sales",
+    "issue_type",
+    "issue_value",
 )
 ACTION_METADATA = {
     "inventory_out_of_stock": {
-        "category": "inventory", "action_label": "Go to Inventory",
-        "action_url": "/app/inventory", "filename": "out_of_stock_products.csv",
+        "category": "inventory",
+        "action_label": "Go to Inventory",
+        "action_url": "/app/inventory",
+        "filename": "out_of_stock_products.csv",
         "columns": INVENTORY_CSV_COLUMNS,
     },
     "inventory_low_stock": {
-        "category": "inventory", "action_label": "Go to Inventory",
-        "action_url": "/app/inventory", "filename": "low_stock_products.csv",
+        "category": "inventory",
+        "action_label": "Go to Inventory",
+        "action_url": "/app/inventory",
+        "filename": "low_stock_products.csv",
         "columns": INVENTORY_CSV_COLUMNS,
     },
     "sales_no_orders": {
-        "category": "orders", "action_label": "Go to Orders",
-        "action_url": "/app/orders", "filename": "order_issues.csv",
+        "category": "orders",
+        "action_label": "Go to Orders",
+        "action_url": "/app/orders",
+        "filename": "order_issues.csv",
         "columns": ORDER_CSV_COLUMNS,
     },
     "sales_low_average_order_value": {
-        "category": "sales", "action_label": "Go to Sales",
+        "category": "sales",
+        "action_label": "Go to Sales",
         "action_url": "/app/sales",
         "filename": "low_average_order_value_sales.csv",
         "columns": SALES_CSV_COLUMNS,
@@ -119,9 +158,11 @@ class DashboardService:
         self,
         repository: DashboardRepository,
         low_stock_threshold: int,
+        today: Callable[[], date] | None = None,
     ) -> None:
         self.repository = repository
         self.low_stock_threshold = low_stock_threshold
+        self.today = today or (lambda: datetime.now(timezone.utc).date())
 
     def get_summary(self, filters: OverviewFilters) -> DashboardSummary:
         metrics = self.repository.get_dashboard_summary(
@@ -141,6 +182,180 @@ class DashboardService:
             total_revenue=float(metrics.total_revenue),
             units_sold=metrics.units_sold,
             average_order_value=float(average_order_value),
+            last_updated_at=metrics.last_updated_at,
+        )
+
+    def get_daily_store_performance(
+        self,
+        page: int,
+        page_size: int,
+        sort_by: str,
+        sort_order: str,
+        filters: OverviewFilters,
+    ) -> DailyStorePerformanceResponse:
+        result = self.repository.get_daily_store_performance(
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+            filters,
+        )
+        total_aov = (
+            result.total_sales / result.total_orders
+            if result.total_orders
+            else Decimal("0")
+        )
+        return DailyStorePerformanceResponse(
+            currency_code=result.currency_code,
+            items=[
+                DailyStorePerformanceItem(
+                    date=row.date,
+                    total_sales=float(_round_money(row.total_sales)),
+                    orders=row.orders,
+                    units_sold=row.units_sold,
+                    average_order_value=float(
+                        _round_money(
+                            row.total_sales / row.orders
+                            if row.orders
+                            else Decimal("0")
+                        )
+                    ),
+                )
+                for row in result.rows
+            ],
+            summary=DailyStorePerformanceSummary(
+                total_sales=float(_round_money(result.total_sales)),
+                orders=result.total_orders,
+                units_sold=result.total_units_sold,
+                average_order_value=float(_round_money(total_aov)),
+            ),
+            pagination=DailyStorePerformancePagination(
+                page=page,
+                page_size=page_size,
+                total_items=result.total_items,
+                total_pages=(
+                    (result.total_items + page_size - 1) // page_size
+                    if result.total_items
+                    else 0
+                ),
+            ),
+        )
+
+    def get_last_seven_days_performance(
+        self,
+        filters: OverviewFilters,
+    ) -> LastSevenDaysPerformanceResponse:
+        """Return the fixed UTC rolling seven-day charts and prior comparison."""
+        current_end = self.today()
+        current_start = current_end - timedelta(days=6)
+        previous_end = current_start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=6)
+        current_start_at = datetime.combine(
+            current_start,
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        current_end_at = datetime.combine(
+            current_end,
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        previous_start_at = datetime.combine(
+            previous_start,
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        previous_end_at = datetime.combine(
+            previous_end,
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        non_date_filters = replace(filters, start_date=None, end_date=None)
+        current_filters = replace(
+            non_date_filters,
+            start_date=current_start_at,
+            end_date=current_end_at,
+        )
+        previous_filters = replace(
+            non_date_filters,
+            start_date=previous_start_at,
+            end_date=previous_end_at,
+        )
+
+        daily = self.repository.get_daily_store_performance(
+            1,
+            7,
+            "date",
+            "asc",
+            current_filters,
+        )
+        daily_by_date = {row.date: row for row in daily.rows}
+        order_items = []
+        for day_offset in range(7):
+            item_date = current_start + timedelta(days=day_offset)
+            row = daily_by_date.get(item_date)
+            order_items.append(
+                LastSevenDaysOrderItem(
+                    date=item_date,
+                    orders=row.orders if row else 0,
+                    units_sold=row.units_sold if row else 0,
+                )
+            )
+
+        top_products = self.repository.get_top_products_by_units(current_filters, 5)
+        current_sales = self.repository.get_sales_metrics(current_filters)
+        previous_sales = self.repository.get_sales_metrics(previous_filters)
+        current_total = current_sales.total_revenue or Decimal("0")
+        previous_total = previous_sales.total_revenue or Decimal("0")
+        percentage_change = _percentage_change(current_total, previous_total)
+        if current_total == 0 and previous_total == 0:
+            comparison_status = "no_change"
+        elif previous_total == 0:
+            comparison_status = "new_activity"
+        elif current_total < previous_total:
+            comparison_status = "decline"
+        elif current_total > previous_total:
+            comparison_status = "increase"
+        else:
+            comparison_status = "no_change"
+
+        return LastSevenDaysPerformanceResponse(
+            period=LastSevenDaysPeriod(
+                time_zone="UTC",
+                current_start=current_start,
+                current_end=current_end,
+                previous_start=previous_start,
+                previous_end=previous_end,
+            ),
+            orders_by_day=LastSevenDaysOrders(
+                total_orders=sum(item.orders for item in order_items),
+                items=order_items,
+            ),
+            top_selling_products=LastSevenDaysTopProducts(
+                items=[
+                    LastSevenDaysProductItem(
+                        product_id=product.product_id,
+                        product_name=product.product_title or "Untitled product",
+                        units_sold=product.units_sold,
+                        orders=product.orders,
+                        net_product_sales=float(
+                            _round_money(product.net_product_sales)
+                        ),
+                    )
+                    for product in top_products
+                ]
+            ),
+            total_revenue_comparison=LastSevenDaysSalesComparison(
+                current_total_sales=float(_round_money(current_total)),
+                previous_total_sales=float(_round_money(previous_total)),
+                percentage_change=_optional_float(percentage_change),
+                status=comparison_status,
+            ),
+            currency_code=(
+                current_sales.currency_code
+                or previous_sales.currency_code
+                or daily.currency_code
+            ),
         )
 
     def get_filter_options(self) -> OverviewFilterOptionsResponse:
@@ -154,96 +369,344 @@ class DashboardService:
     def get_business_highlights(
         self, filters: OverviewFilters
     ) -> BusinessHighlightsResponse:
-        sales = self.repository.get_sales_metrics(filters)
-        inventory = self.repository.get_inventory_health(self.low_stock_threshold)
-        top_product = self.repository.get_top_selling_product(filters)
-
-        highlights: list[BusinessHighlight] = []
-        if sales.total_orders > 0 and sales.total_revenue is not None:
-            total_revenue = _round_money(sales.total_revenue)
-            average_order_value = _round_money(
-                sales.total_revenue / sales.total_orders
-            )
-            highlights.append(
-                SalesPerformanceHighlight(
-                    id="sales_performance",
-                    category="sales",
-                    severity="info",
-                    title="Sales performance",
-                    message=(
-                        f"{_format_money(total_revenue, sales.currency_code)} "
-                        f"in revenue was generated from "
-                        f"{_format_count(sales.total_orders, 'order')}."
-                    ),
-                    supporting_text=(
-                        "Average order value was "
-                        f"{_format_money(average_order_value, sales.currency_code)}."
-                    ),
-                    metrics=SalesHighlightMetrics(
-                        total_revenue=float(total_revenue),
-                        total_orders=sales.total_orders,
-                        average_order_value=float(average_order_value),
-                    ),
-                )
-            )
-
-        if inventory.products_with_inventory > 0:
-            severity = "positive"
-            if inventory.out_of_stock_count > 0:
-                severity = "critical"
-            elif inventory.low_stock_count > 0:
-                severity = "warning"
-
-            highlights.append(
-                InventoryHealthHighlight(
-                    id="inventory_health",
-                    category="inventory",
-                    severity=severity,
-                    title="Inventory health",
-                    message=_inventory_message(
-                        inventory.low_stock_count, inventory.out_of_stock_count
-                    ),
-                    supporting_text=None,
-                    metrics=InventoryHighlightMetrics(
-                        low_stock_count=inventory.low_stock_count,
-                        out_of_stock_count=inventory.out_of_stock_count,
-                    ),
-                )
-            )
-
-        if top_product is not None:
-            product_title = top_product.product_title or "Untitled product"
-            product_revenue = _round_money(top_product.product_revenue)
-            supporting_text = (
-                "Product revenue was "
-                f"{_format_money(product_revenue, top_product.currency_code)}."
-            )
-            highlights.append(
-                TopSellingProductHighlight(
-                    id="top_selling_product",
-                    category="products",
-                    severity="info",
-                    title="Top-selling product",
-                    message=(
-                        f"{product_title} is the top-selling product with "
-                        f"{_format_count(top_product.units_sold, 'unit')} sold."
-                    ),
-                    supporting_text=supporting_text,
-                    metrics=TopProductHighlightMetrics(
-                        product_id=top_product.product_id,
-                        product_title=product_title,
-                        units_sold=top_product.units_sold,
-                        product_revenue=float(product_revenue),
-                    ),
-                )
-            )
-
-        currency_code = sales.currency_code or (
-            top_product.currency_code if top_product else None
+        sales_momentum, sales_currency = self._build_sales_momentum(filters)
+        concentration_result = self.repository.get_product_sales_concentration(
+            filters
+        )
+        concentration = self._build_product_sales_concentration(
+            concentration_result
+        )
+        exposure_result = self.repository.get_inventory_exposure(
+            self.low_stock_threshold,
+            filters,
+        )
+        exposure = self._build_inventory_exposure(exposure_result)
+        currency_code = (
+            sales_currency
+            or concentration_result.currency_code
+            or exposure_result.currency_code
         )
         return BusinessHighlightsResponse(
             currency_code=currency_code,
-            highlights=highlights,
+            highlights=[sales_momentum, concentration, exposure],
+        )
+
+    def _build_sales_momentum(
+        self,
+        filters: OverviewFilters,
+    ) -> tuple[SalesMomentumHighlight, str | None]:
+        if filters.start_date is None or filters.end_date is None:
+            current = self.repository.get_sales_metrics(filters)
+            return (
+                SalesMomentumHighlight(
+                    id="sales_momentum",
+                    title="Sales Momentum",
+                    status="unavailable",
+                    message=(
+                        "Select a complete date range to compare sales with the "
+                        "immediately preceding period."
+                    ),
+                    supporting_text=None,
+                    helper_text=(
+                        "The previous period uses the same number of inclusive "
+                        "calendar days."
+                    ),
+                    action_label="View daily performance",
+                    current_period=None,
+                    previous_period=None,
+                    total_sales_change_percentage=None,
+                    order_change=None,
+                    order_change_percentage=None,
+                    aov_change_percentage=None,
+                ),
+                current.currency_code,
+            )
+
+        period_days = (filters.end_date - filters.start_date).days + 1
+        previous_end = filters.start_date - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=period_days - 1)
+        previous_filters = replace(
+            filters,
+            start_date=previous_start,
+            end_date=previous_end,
+        )
+        current_sales = self.repository.get_sales_metrics(filters)
+        previous_sales = self.repository.get_sales_metrics(previous_filters)
+        current_revenue = current_sales.total_revenue or Decimal("0")
+        previous_revenue = previous_sales.total_revenue or Decimal("0")
+        current_aov = (
+            current_revenue / current_sales.total_orders
+            if current_sales.total_orders
+            else Decimal("0")
+        )
+        previous_aov = (
+            previous_revenue / previous_sales.total_orders
+            if previous_sales.total_orders
+            else Decimal("0")
+        )
+        revenue_change = _percentage_change(current_revenue, previous_revenue)
+        order_change = current_sales.total_orders - previous_sales.total_orders
+        order_change_percentage = _percentage_change(
+            Decimal(current_sales.total_orders),
+            Decimal(previous_sales.total_orders),
+        )
+        aov_change = _percentage_change(current_aov, previous_aov)
+
+        if current_revenue == 0 and current_sales.total_orders == 0:
+            status = (
+                "no_activity"
+                if previous_revenue == 0 and previous_sales.total_orders == 0
+                else "attention"
+            )
+            message = "No sales activity was recorded in the selected period."
+        elif previous_revenue == 0 and current_revenue > 0:
+            status = "new_activity"
+            message = "Sales activity started in the selected period."
+        else:
+            comparable_change = revenue_change or Decimal("0")
+            if comparable_change >= SALES_MOMENTUM_CHANGE_THRESHOLD:
+                status = "positive"
+                movement = "increased"
+            elif comparable_change <= -SALES_MOMENTUM_CHANGE_THRESHOLD:
+                status = "attention"
+                movement = "decreased"
+            else:
+                status = "stable"
+                movement = "remained broadly stable"
+            message = (
+                "Total sales remained broadly stable compared with the previous "
+                "period."
+                if status == "stable"
+                else (
+                    f"Total sales {movement} by "
+                    f"{_format_percentage(abs(comparable_change))} compared with "
+                    "the previous period."
+                )
+            )
+
+        supporting_text = _sales_momentum_supporting_text(
+            order_change,
+            aov_change,
+            current_sales.total_orders,
+            previous_sales.total_orders,
+        )
+        return (
+            SalesMomentumHighlight(
+                id="sales_momentum",
+                title="Sales Momentum",
+                status=status,
+                message=message,
+                supporting_text=supporting_text,
+                helper_text=(
+                    f"Compares {filters.start_date.isoformat()} through "
+                    f"{filters.end_date.isoformat()} with {previous_start.isoformat()} "
+                    f"through {previous_end.isoformat()}."
+                ),
+                action_label="View daily performance",
+                current_period=_comparison_period(
+                    filters.start_date,
+                    filters.end_date,
+                    current_revenue,
+                    current_sales.total_orders,
+                ),
+                previous_period=_comparison_period(
+                    previous_start,
+                    previous_end,
+                    previous_revenue,
+                    previous_sales.total_orders,
+                ),
+                total_sales_change_percentage=_optional_float(revenue_change),
+                order_change=order_change,
+                order_change_percentage=_optional_float(order_change_percentage),
+                aov_change_percentage=_optional_float(aov_change),
+            ),
+            current_sales.currency_code or previous_sales.currency_code,
+        )
+
+    @staticmethod
+    def _build_product_sales_concentration(result):
+        if not result.top_products:
+            return ProductSalesConcentrationHighlight(
+                id="product_sales_concentration",
+                title="Product Sales Concentration",
+                status="unavailable",
+                message=(
+                    "Product sales concentration is unavailable because no "
+                    "qualifying product sales were recorded."
+                ),
+                supporting_text=None,
+                helper_text="Uses net product sales grouped by Shopify product ID.",
+                action_label="View top products",
+                top_product=None,
+                products_in_top_group=0,
+                top_group_net_product_sales=None,
+                top_group_contribution_percentage=None,
+                total_net_product_sales=None,
+            )
+        total = result.total_net_product_sales
+        if total <= 0:
+            return ProductSalesConcentrationHighlight(
+                id="product_sales_concentration",
+                title="Product Sales Concentration",
+                status="unavailable",
+                message=(
+                    "Product sales concentration is unavailable because net "
+                    "product sales were not positive during this period."
+                ),
+                supporting_text=None,
+                helper_text="Uses net product sales grouped by Shopify product ID.",
+                action_label="View top products",
+                top_product=None,
+                products_in_top_group=min(result.product_count, 3),
+                top_group_net_product_sales=None,
+                top_group_contribution_percentage=None,
+                total_net_product_sales=float(_round_money(total)),
+            )
+        top_product = result.top_products[0]
+        top_share = top_product.net_product_sales / total * Decimal("100")
+        top_group_sales = sum(
+            (product.net_product_sales for product in result.top_products),
+            Decimal("0"),
+        )
+        top_group_share = top_group_sales / total * Decimal("100")
+        if top_share >= HIGH_PRODUCT_CONCENTRATION_THRESHOLD:
+            status = "high"
+        elif top_share >= MODERATE_PRODUCT_CONCENTRATION_THRESHOLD:
+            status = "moderate"
+        else:
+            status = "diversified"
+        product_name = top_product.product_title or "Untitled product"
+        group_count = len(result.top_products)
+        supporting_text = (
+            f"The {group_count} products sold generated all net product sales."
+            if result.product_count < 3
+            else (
+                "The top three products contributed "
+                f"{_format_percentage(top_group_share)} of net product sales."
+            )
+        )
+        return ProductSalesConcentrationHighlight(
+            id="product_sales_concentration",
+            title="Product Sales Concentration",
+            status=status,
+            message=(
+                f"{product_name} generated {_format_percentage(top_share)} of "
+                "net product sales."
+            ),
+            supporting_text=supporting_text,
+            helper_text=(
+                "Order-level discounts and refunds are allocated in proportion "
+                "to line-item gross sales."
+            ),
+            action_label="View top products",
+            top_product=ProductConcentrationProduct(
+                product_id=top_product.product_id,
+                product_name=product_name,
+                net_product_sales=float(_round_money(top_product.net_product_sales)),
+                units_sold=top_product.units_sold,
+                contribution_percentage=float(_round_percentage(top_share)),
+            ),
+            products_in_top_group=group_count,
+            top_group_net_product_sales=float(_round_money(top_group_sales)),
+            top_group_contribution_percentage=float(
+                _round_percentage(top_group_share)
+            ),
+            total_net_product_sales=float(_round_money(total)),
+        )
+
+    @staticmethod
+    def _build_inventory_exposure(result):
+        helper_text = (
+            "Based on sales in the selected period and current inventory levels."
+        )
+        if not result.inventory_available:
+            return InventoryExposureHighlight(
+                id="inventory_exposure",
+                title="Inventory Exposure",
+                status="unavailable",
+                message="Current tracked inventory data is unavailable.",
+                supporting_text=None,
+                helper_text=helper_text,
+                action_label="Review affected products",
+                affected_product_count=0,
+                low_stock_product_count=0,
+                out_of_stock_product_count=0,
+                affected_net_product_sales=None,
+                affected_units_sold=None,
+                highest_impact_product=None,
+                inventory_as_of=None,
+            )
+        if result.affected_product_count == 0:
+            return InventoryExposureHighlight(
+                id="inventory_exposure",
+                title="Inventory Exposure",
+                status="healthy",
+                message=(
+                    "No recently selling products require inventory review for "
+                    "this period."
+                ),
+                supporting_text=None,
+                helper_text=helper_text,
+                action_label="Review affected products",
+                affected_product_count=0,
+                low_stock_product_count=0,
+                out_of_stock_product_count=0,
+                affected_net_product_sales=0,
+                affected_units_sold=0,
+                highest_impact_product=None,
+                inventory_as_of=(
+                    result.inventory_as_of.isoformat()
+                    if result.inventory_as_of
+                    else None
+                ),
+            )
+        status = (
+            "critical" if result.out_of_stock_product_count else "warning"
+        )
+        top = result.highest_impact_product
+        top_status = result.highest_impact_inventory_status
+        highest_impact = None
+        supporting_text = None
+        if top is not None and top_status is not None:
+            product_name = top.product_title or "Untitled product"
+            status_label = top_status.replace("_", " ")
+            supporting_text = (
+                f"{product_name} has the highest exposure and is currently "
+                f"{status_label}."
+            )
+            highest_impact = InventoryExposureProduct(
+                product_id=top.product_id,
+                product_name=product_name,
+                inventory_status=top_status,
+                net_product_sales=float(_round_money(top.net_product_sales)),
+                units_sold=top.units_sold,
+            )
+        return InventoryExposureHighlight(
+            id="inventory_exposure",
+            title="Inventory Exposure",
+            status=status,
+            message=(
+                f"{_format_count(result.affected_product_count, 'recently selling product')} "
+                "currently need inventory attention. These products generated "
+                f"{_format_money(result.affected_net_product_sales, result.currency_code)} "
+                "in net product sales during the selected period."
+            ),
+            supporting_text=supporting_text,
+            helper_text=helper_text,
+            action_label="Review affected products",
+            affected_product_count=result.affected_product_count,
+            low_stock_product_count=result.low_stock_product_count,
+            out_of_stock_product_count=result.out_of_stock_product_count,
+            affected_net_product_sales=float(
+                _round_money(result.affected_net_product_sales)
+            ),
+            affected_units_sold=result.affected_units_sold,
+            highest_impact_product=highest_impact,
+            inventory_as_of=(
+                result.inventory_as_of.isoformat()
+                if result.inventory_as_of
+                else None
+            ),
         )
 
 
@@ -412,6 +875,7 @@ class ActionNeededService:
                 for row in source_rows
             ]
         else:
+            # A no-orders alert has no contributing order records by definition.
             records = []
 
         output = io.StringIO(newline="")
@@ -421,7 +885,8 @@ class ActionNeededService:
         writer.writeheader()
         writer.writerows(records)
         return OverviewActionCsvExport(
-            filename=metadata["filename"], content=output.getvalue()
+            filename=metadata["filename"],
+            content=output.getvalue(),
         )
 
     @staticmethod
@@ -455,6 +920,71 @@ def _format_money(amount: Decimal, currency_code: str | None) -> str:
 
 def _round_money(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _round_percentage(amount: Decimal) -> Decimal:
+    return amount.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+
+def _format_percentage(amount: Decimal) -> str:
+    return f"{_round_percentage(amount):.1f}%"
+
+
+def _percentage_change(current: Decimal, previous: Decimal) -> Decimal | None:
+    if previous == 0:
+        return Decimal("0") if current == 0 else None
+    return (current - previous) / previous * Decimal("100")
+
+
+def _optional_float(value: Decimal | None) -> float | None:
+    return float(_round_percentage(value)) if value is not None else None
+
+
+def _comparison_period(
+    start_date: date,
+    end_date: date,
+    total_sales: Decimal,
+    orders: int,
+) -> ComparisonPeriodMetrics:
+    average_order_value = total_sales / orders if orders else Decimal("0")
+    return ComparisonPeriodMetrics(
+        start_date=start_date,
+        end_date=end_date,
+        total_sales=float(_round_money(total_sales)),
+        orders=orders,
+        average_order_value=float(_round_money(average_order_value)),
+    )
+
+
+def _sales_momentum_supporting_text(
+    order_change: int,
+    aov_change: Decimal | None,
+    current_orders: int,
+    previous_orders: int,
+) -> str:
+    if previous_orders == 0 and current_orders > 0:
+        return (
+            f"The store generated {_format_count(current_orders, 'order')} after "
+            "recording no orders in the previous period."
+        )
+    if order_change > 0:
+        order_text = f"Orders increased by {order_change:,}"
+    elif order_change < 0:
+        order_text = f"Orders decreased by {abs(order_change):,}"
+    else:
+        order_text = "Orders remained unchanged"
+    if aov_change is None:
+        aov_text = "average order value had no previous baseline"
+    elif aov_change > 0:
+        aov_text = f"average order value increased by {_format_percentage(aov_change)}"
+    elif aov_change < 0:
+        aov_text = (
+            "average order value decreased by "
+            f"{_format_percentage(abs(aov_change))}"
+        )
+    else:
+        aov_text = "average order value remained unchanged"
+    return f"{order_text}, while {aov_text}."
 
 
 def _format_count(value: int, noun: str) -> str:

@@ -42,6 +42,59 @@ class AffectedProductRow:
 
 
 class DashboardRepositoryTests(unittest.TestCase):
+    def test_daily_grouping_uses_explicit_utc_calendar_date(self):
+        statement = DashboardRepository(object())._daily_store_performance_statement()
+        sql = str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).lower()
+
+        self.assertIn("timezone('utc', orders.processed_at)", sql)
+
+    def test_product_net_sales_groups_by_product_and_allocates_order_adjustments(self):
+        statement = DashboardRepository(object())._product_net_sales_statement(
+            OverviewFilters(financial_statuses=("PAID",))
+        )
+        sql = str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).lower()
+
+        self.assertIn("group by", sql)
+        self.assertIn("product_id", sql)
+        self.assertIn("total_discount", sql)
+        self.assertIn("total_refunded", sql)
+        self.assertIn("orders.financial_status in ('paid')", sql)
+        self.assertIn("order_gross", sql)
+        self.assertIn("count(distinct", sql)
+
+    def test_top_products_rank_by_units_sales_and_product_id_with_limit(self):
+        session = CapturingSession(
+            [("product-1", "Example", 5, 3, Decimal("42"), "USD")]
+        )
+
+        rows = DashboardRepository(session).get_top_products_by_units(
+            OverviewFilters(start_date=date(2026, 8, 7)),
+            limit=5,
+        )
+        sql = str(
+            session.statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).lower()
+
+        self.assertEqual(rows[0].orders, 3)
+        self.assertIn("order by", sql)
+        self.assertIn("units_sold desc", sql)
+        self.assertIn("net_product_sales desc", sql)
+        self.assertIn("product_id asc", sql)
+        self.assertIn("limit 5", sql)
+
     def test_inventory_query_uses_postgresql_distinct_product_aggregates(self):
         session = CapturingSession(Row())
 

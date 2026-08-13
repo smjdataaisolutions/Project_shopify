@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { NavLink } from "react-router";
 import styles from "./analyticsTopNavigation.module.css";
 
@@ -9,7 +10,7 @@ const NAVIGATION_ITEMS = [
   { label: "Products", to: "/app/products" },
 ];
 
-export function AnalyticsTopNavigation() {
+export function AnalyticsTopNavigation({ children }) {
   return (
     <nav className={styles.navigation} aria-label="Analytics pages">
       <div className={styles.links}>
@@ -26,6 +27,7 @@ export function AnalyticsTopNavigation() {
           </NavLink>
         ))}
       </div>
+      {children ? <div className={styles.actions}>{children}</div> : null}
     </nav>
   );
 }
