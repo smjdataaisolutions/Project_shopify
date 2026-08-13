@@ -1,6 +1,6 @@
 from datetime import date
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,6 +13,8 @@ from app.schemas.dashboard import (
     ActionNeededResponse,
     BusinessHighlightsResponse,
     DashboardSummary,
+    DailyStorePerformanceResponse,
+    LastSevenDaysPerformanceResponse,
     OverviewFilterOptionsResponse,
 )
 from app.services.dashboard_service import (
@@ -45,6 +47,21 @@ def get_overview_filters(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+def get_overview_non_date_filters(
+    financial_status: Annotated[list[str] | None, Query()] = None,
+    fulfillment_status: Annotated[list[str] | None, Query()] = None,
+    sales_channel: Annotated[list[str] | None, Query()] = None,
+) -> OverviewFilters:
+    """Build fixed-window chart filters without accepting custom dates."""
+    return build_overview_filters(
+        None,
+        None,
+        financial_status,
+        fulfillment_status,
+        sales_channel,
+    )
+
+
 def _dashboard_service(db: Session) -> DashboardService:
     return DashboardService(
         DashboardRepository(db),
@@ -74,6 +91,60 @@ def get_dashboard(
         raise HTTPException(
             status_code=500,
             detail="Unable to retrieve store performance overview.",
+        ) from error
+
+
+@router.get(
+    "/analytics/store-performance/daily",
+    response_model=DailyStorePerformanceResponse,
+)
+def get_daily_store_performance(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    sort_by: Literal[
+        "date",
+        "total_sales",
+        "orders",
+        "units_sold",
+        "average_order_value",
+    ] = Query(default="date"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    filters: OverviewFilters = Depends(get_overview_filters),
+    db: Session = Depends(get_db),
+) -> DailyStorePerformanceResponse:
+    """Return filtered daily store performance with complete-result totals."""
+    try:
+        return _dashboard_service(db).get_daily_store_performance(
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+            filters,
+        )
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve daily store performance")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve daily store performance.",
+        ) from error
+
+
+@router.get(
+    "/analytics/store-performance/last-seven-days",
+    response_model=LastSevenDaysPerformanceResponse,
+)
+def get_last_seven_days_performance(
+    filters: OverviewFilters = Depends(get_overview_non_date_filters),
+    db: Session = Depends(get_db),
+) -> LastSevenDaysPerformanceResponse:
+    """Return fixed rolling seven-day charts using supported non-date filters."""
+    try:
+        return _dashboard_service(db).get_last_seven_days_performance(filters)
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve last seven days performance")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve last seven days performance.",
         ) from error
 
 

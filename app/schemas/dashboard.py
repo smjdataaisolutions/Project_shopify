@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,82 @@ class DashboardSummary(BaseModel):
     total_revenue: float = Field(ge=0)
     units_sold: int = Field(ge=0)
     average_order_value: float = Field(ge=0)
+    last_updated_at: datetime | None = None
+
+
+class DailyStorePerformanceItem(BaseModel):
+    date: date
+    total_sales: float
+    orders: int = Field(ge=0)
+    units_sold: int
+    average_order_value: float
+
+
+class DailyStorePerformanceSummary(BaseModel):
+    total_sales: float
+    orders: int = Field(ge=0)
+    units_sold: int
+    average_order_value: float
+
+
+class DailyStorePerformancePagination(BaseModel):
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1)
+    total_items: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class DailyStorePerformanceResponse(BaseModel):
+    currency_code: str | None
+    items: list[DailyStorePerformanceItem]
+    summary: DailyStorePerformanceSummary
+    pagination: DailyStorePerformancePagination
+
+
+class LastSevenDaysPeriod(BaseModel):
+    time_zone: Literal["UTC"]
+    current_start: date
+    current_end: date
+    previous_start: date
+    previous_end: date
+
+
+class LastSevenDaysOrderItem(BaseModel):
+    date: date
+    orders: int = Field(ge=0)
+    units_sold: int
+
+
+class LastSevenDaysOrders(BaseModel):
+    total_orders: int = Field(ge=0)
+    items: list[LastSevenDaysOrderItem]
+
+
+class LastSevenDaysProductItem(BaseModel):
+    product_id: str
+    product_name: str
+    units_sold: int
+    orders: int = Field(ge=0)
+    net_product_sales: float
+
+
+class LastSevenDaysTopProducts(BaseModel):
+    items: list[LastSevenDaysProductItem]
+
+
+class LastSevenDaysSalesComparison(BaseModel):
+    current_total_sales: float
+    previous_total_sales: float
+    percentage_change: float | None
+    status: Literal["increase", "decline", "no_change", "new_activity"]
+
+
+class LastSevenDaysPerformanceResponse(BaseModel):
+    period: LastSevenDaysPeriod
+    orders_by_day: LastSevenDaysOrders
+    top_selling_products: LastSevenDaysTopProducts
+    total_revenue_comparison: LastSevenDaysSalesComparison
+    currency_code: str | None
 
 
 class SalesChannelFilterOption(BaseModel):
@@ -34,65 +111,92 @@ class OverviewFilterOptionsResponse(BaseModel):
     sales_channels: list[SalesChannelFilterOption]
 
 
-class SalesHighlightMetrics(BaseModel):
-    total_revenue: float = Field(ge=0)
-    total_orders: int = Field(ge=0)
-    average_order_value: float = Field(ge=0)
+class ComparisonPeriodMetrics(BaseModel):
+    start_date: date
+    end_date: date
+    total_sales: float
+    orders: int = Field(ge=0)
+    average_order_value: float
 
 
-class InventoryHighlightMetrics(BaseModel):
-    low_stock_count: int = Field(ge=0)
-    out_of_stock_count: int = Field(ge=0)
+class SalesMomentumHighlight(BaseModel):
+    id: Literal["sales_momentum"]
+    title: Literal["Sales Momentum"]
+    status: Literal[
+        "positive",
+        "attention",
+        "stable",
+        "new_activity",
+        "no_activity",
+        "unavailable",
+    ]
+    message: str
+    supporting_text: str | None
+    helper_text: str | None = None
+    action_label: Literal["View daily performance"]
+    current_period: ComparisonPeriodMetrics | None
+    previous_period: ComparisonPeriodMetrics | None
+    total_sales_change_percentage: float | None
+    order_change: int | None
+    order_change_percentage: float | None
+    aov_change_percentage: float | None
 
 
-class TopProductHighlightMetrics(BaseModel):
+class ProductConcentrationProduct(BaseModel):
     product_id: str
-    variant_id: str | None = None
-    product_title: str
-    units_sold: int = Field(ge=0)
-    product_revenue: float = Field(ge=0)
+    product_name: str
+    net_product_sales: float
+    units_sold: int
+    contribution_percentage: float | None
 
 
-class SalesPerformanceHighlight(BaseModel):
-    id: Literal["sales_performance"]
-    category: Literal["sales"]
-    severity: Literal["info"]
-    title: str
+class ProductSalesConcentrationHighlight(BaseModel):
+    id: Literal["product_sales_concentration"]
+    title: Literal["Product Sales Concentration"]
+    status: Literal["high", "moderate", "diversified", "unavailable"]
     message: str
     supporting_text: str | None
-    metrics: SalesHighlightMetrics
+    helper_text: str | None = None
+    action_label: Literal["View top products"]
+    top_product: ProductConcentrationProduct | None
+    products_in_top_group: int = Field(ge=0)
+    top_group_net_product_sales: float | None
+    top_group_contribution_percentage: float | None
+    total_net_product_sales: float | None
 
 
-class InventoryHealthHighlight(BaseModel):
-    id: Literal["inventory_health"]
-    category: Literal["inventory"]
-    severity: Literal["positive", "warning", "critical"]
-    title: str
+class InventoryExposureProduct(BaseModel):
+    product_id: str
+    product_name: str
+    inventory_status: Literal["low_stock", "out_of_stock"]
+    net_product_sales: float
+    units_sold: int
+
+
+class InventoryExposureHighlight(BaseModel):
+    id: Literal["inventory_exposure"]
+    title: Literal["Inventory Exposure"]
+    status: Literal["critical", "warning", "healthy", "unavailable"]
     message: str
     supporting_text: str | None
-    metrics: InventoryHighlightMetrics
-
-
-class TopSellingProductHighlight(BaseModel):
-    id: Literal["top_selling_product"]
-    category: Literal["products"]
-    severity: Literal["info"]
-    title: str
-    message: str
-    supporting_text: str | None
-    metrics: TopProductHighlightMetrics
-
-
-BusinessHighlight = (
-    SalesPerformanceHighlight
-    | InventoryHealthHighlight
-    | TopSellingProductHighlight
-)
+    helper_text: str
+    action_label: Literal["Review affected products"]
+    affected_product_count: int = Field(ge=0)
+    low_stock_product_count: int = Field(ge=0)
+    out_of_stock_product_count: int = Field(ge=0)
+    affected_net_product_sales: float | None
+    affected_units_sold: int | None
+    highest_impact_product: InventoryExposureProduct | None
+    inventory_as_of: str | None
 
 
 class BusinessHighlightsResponse(BaseModel):
     currency_code: str | None
-    highlights: list[BusinessHighlight]
+    highlights: list[
+        SalesMomentumHighlight
+        | ProductSalesConcentrationHighlight
+        | InventoryExposureHighlight
+    ]
 
 
 class AffectedProduct(BaseModel):

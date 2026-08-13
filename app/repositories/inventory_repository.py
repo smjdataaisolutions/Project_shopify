@@ -72,6 +72,18 @@ class InventoryRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    @classmethod
+    def product_inventory_scope_statement(
+        cls,
+        filters: InventoryFilters = InventoryFilters(),
+        low_stock_threshold: int = 10,
+    ):
+        """Expose the canonical Inventory Product View aggregation for reuse."""
+        return cls._product_inventory_table_statement(
+            filters,
+            low_stock_threshold,
+        )
+
     def get_kpi_inputs(
         self,
         start_date: date,

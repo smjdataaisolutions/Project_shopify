@@ -25,6 +25,29 @@
   min-width: 0;
 }
 
+.fixedPeriodHelper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.infoTooltip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--p-color-text-secondary, #616161);
+  cursor: help;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+.infoTooltip:focus {
+  outline: 2px solid var(--p-color-border-focus, #005bd3);
+  outline-offset: 2px;
+}
+
 .inventoryViewSwitcher {
   display: grid;
   grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);

@@ -1,0 +1,34 @@
+.cardShell {
+  position: relative;
+  min-height: 4rem;
+}
+
+.cardButton {
+  display: block;
+  width: 100%;
+  min-height: 4rem;
+  padding: 0 2.5rem 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.35rem;
+}
+
+.cardButton:hover {
+  background: var(--p-color-bg-surface-hover, #f7f7f7);
+}
+
+.cardButton:focus-visible {
+  outline: 2px solid var(--p-color-border-focus, #005bd3);
+  outline-offset: 2px;
+}
+
+.infoButton {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  z-index: 1;
+}

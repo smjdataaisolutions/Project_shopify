@@ -105,6 +105,16 @@
   background: #f1f1f1;
 }
 
+.optionText {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+
+.optionLabel {
+  line-height: 1.25rem;
+}
+
 .option:focus-visible {
   outline: 2px solid #005bd3;
   outline-offset: 1px;

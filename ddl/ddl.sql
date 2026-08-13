@@ -77,6 +77,21 @@ CREATE TABLE IF NOT EXISTS orders (
   refund_reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS shopify_sync_state (
+  source TEXT PRIMARY KEY,
+  last_successful_sync_at TIMESTAMPTZ NOT NULL
+);
+
+INSERT INTO shopify_sync_state (source, last_successful_sync_at)
+SELECT 'shopify', MAX(updated_at)
+FROM (
+  SELECT updated_at FROM products
+  UNION ALL
+  SELECT updated_at FROM inventory
+) AS synchronized_source_updates
+HAVING MAX(updated_at) IS NOT NULL
+ON CONFLICT (source) DO NOTHING;
+
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
