@@ -2,7 +2,98 @@
 import { useEffect, useId, useState } from "react";
 import { fetchSalesFilterOptions } from "../../services/sales";
 import { DateRangePicker } from "../filters/DateRangePicker";
+import { formatDateRange } from "../../utils/dateRanges";
 import styles from "../dashboard/overviewFilters.module.css";
+
+export function hasSalesFilters(filters) {
+  return Boolean(
+    filters.startDate ||
+      filters.endDate ||
+      filters.salesChannels?.length ||
+      filters.orderStatuses?.length ||
+      filters.currencies?.length,
+  );
+}
+
+export function AppliedSalesFilters({ filters, options, onChange }) {
+  if (!hasSalesFilters(filters)) return null;
+
+  const mappedChannelValues = new Set();
+  const channelChips = (options?.sales_channels || [])
+    .filter((option) =>
+      option.values.some((value) => filters.salesChannels.includes(value)),
+    )
+    .map((option) => {
+      option.values.forEach((value) => mappedChannelValues.add(value));
+      return {
+        key: `channel:${option.id}`,
+        label: `Sales channel: ${option.name}`,
+        remove: () =>
+          onChange({
+            ...filters,
+            salesChannels: filters.salesChannels.filter(
+              (value) => !option.values.includes(value),
+            ),
+          }),
+      };
+    });
+
+  const chips = [
+    ...(filters.startDate || filters.endDate
+      ? [
+          {
+            key: "date",
+            label: `Date: ${formatDateRange(filters)}`,
+            remove: () =>
+              onChange({ ...filters, startDate: "", endDate: "" }),
+          },
+        ]
+      : []),
+    ...channelChips,
+    ...filters.salesChannels
+      .filter((value) => !mappedChannelValues.has(value))
+      .map((value) => ({
+        key: `channel:${value}`,
+        label: `Sales channel: ${value}`,
+        remove: () =>
+          onChange({
+            ...filters,
+            salesChannels: filters.salesChannels.filter(
+              (item) => item !== value,
+            ),
+          }),
+      })),
+    ...filters.orderStatuses.map((value) => ({
+      key: `status:${value}`,
+      label: `Order status: ${value}`,
+      remove: () =>
+        onChange({
+          ...filters,
+          orderStatuses: filters.orderStatuses.filter((item) => item !== value),
+        }),
+    })),
+    ...filters.currencies.map((value) => ({
+      key: `currency:${value}`,
+      label: `Currency: ${value}`,
+      remove: () =>
+        onChange({
+          ...filters,
+          currencies: filters.currencies.filter((item) => item !== value),
+        }),
+    })),
+  ];
+
+  return (
+    <s-stack direction="inline" gap="small" alignItems="center">
+      <s-text tone="subdued">Applied filters:</s-text>
+      {chips.map((chip) => (
+        <s-button key={chip.key} variant="tertiary" onClick={chip.remove}>
+          {chip.label} {"\u00d7"}
+        </s-button>
+      ))}
+    </s-stack>
+  );
+}
 
 function FilterOption({ label, selected, onClick }) {
   return (
@@ -84,7 +175,13 @@ function MultiSelectGroup({ heading, options, selectedValues, onChange }) {
   );
 }
 
-export function SalesFilters({ filters, onChange, isCollapsed, onCollapse }) {
+export function SalesFilters({
+  filters,
+  onChange,
+  onOptionsChange,
+  isCollapsed,
+  onCollapse,
+}) {
   const [options, setOptions] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -94,7 +191,12 @@ export function SalesFilters({ filters, onChange, isCollapsed, onCollapse }) {
     let active = true;
     setError(null);
     fetchSalesFilterOptions()
-      .then((response) => active && setOptions(response))
+      .then((response) => {
+        if (active) {
+          setOptions(response);
+          onOptionsChange?.(response);
+        }
+      })
       .catch((requestError) => {
         if (active) {
           setError(requestError.message || "Unable to load sales filters.");
@@ -103,7 +205,7 @@ export function SalesFilters({ filters, onChange, isCollapsed, onCollapse }) {
     return () => {
       active = false;
     };
-  }, [requestVersion]);
+  }, [onOptionsChange, requestVersion]);
 
   const clearAll = () => {
     setDatePreset(null);

@@ -46,7 +46,10 @@ class SalesRepositoryTests(unittest.TestCase):
 
         self.assertIn("sum(orders.subtotal_price)", sql)
         self.assertIn("sum(orders.total_discount)", sql)
+        self.assertIn("sum(orders.total_refunded)", sql)
         self.assertIn("sum(orders.total_price)", sql)
+        self.assertIn("count(distinct(orders.id))", sql.lower())
+        self.assertIn("orders.processed_at IS NOT NULL", sql)
         self.assertIn("orders.financial_status IN ('REFUNDED', 'PARTIALLY_REFUNDED')", sql)
         self.assertIn("orders.cancelled_at IS NOT NULL", sql)
         self.assertIn("orders.processed_at >= '2026-08-01'", sql)
@@ -54,6 +57,8 @@ class SalesRepositoryTests(unittest.TestCase):
         self.assertIn("orders.sales_channel IN ('web', 'pos')", sql)
         self.assertIn("orders.financial_status IN ('PAID')", sql)
         self.assertIn("orders.currency_code IN ('USD')", sql)
+        self.assertIn("shopify_sync_state.last_successful_sync_at", sql)
+        self.assertIn("shopify_sync_state.source = 'shopify'", sql)
 
     def test_action_export_uses_contributing_orders_products_and_date_filters(self):
         repository = SalesRepository(db=object())

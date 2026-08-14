@@ -103,6 +103,7 @@ class SalesApiTests(unittest.TestCase):
         self.assertEqual(response.model_dump(), {
             "gross_sales": 120.0,
             "discounts": 20.0,
+            "returns_refunds": 0.0,
             "net_sales": 100.0,
             "shipping": 5.0,
             "taxes": 10.0,
@@ -110,6 +111,7 @@ class SalesApiTests(unittest.TestCase):
             "orders_count": 2,
             "average_order_value": 57.5,
             "currency": "USD",
+            "last_updated_at": None,
         })
 
     @patch("app.routers.sales.SalesRepository.get_filter_options")

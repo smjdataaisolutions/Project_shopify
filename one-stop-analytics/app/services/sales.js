@@ -4,6 +4,7 @@ const SALES_SUMMARY_ENDPOINT = "/api/sales/summary";
 const REVENUE_TREND_ENDPOINT = "/api/sales/revenue/trend";
 const SALES_ACTION_NEEDED_ENDPOINT = "/api/sales/action-needed";
 const SALES_FILTER_OPTIONS_ENDPOINT = "/api/sales/filter-options";
+const DAILY_SALES_BREAKDOWN_ENDPOINT = "/api/sales/daily-breakdown";
 
 function withSalesFilters(endpoint, filters = {}, extraParameters = {}) {
   const parameters = new URLSearchParams(extraParameters);
@@ -32,6 +33,32 @@ export async function fetchSalesSummary(filters) {
 
   if (!response.ok) {
     throw new Error(`Sales summary request failed (${response.status}).`);
+  }
+
+  return response.json();
+}
+
+export async function fetchDailySalesBreakdown({
+  filters,
+  page = 1,
+  pageSize = 10,
+  sortBy = "date",
+  sortDirection = "desc",
+}) {
+  const endpoint = withSalesFilters(DAILY_SALES_BREAKDOWN_ENDPOINT, filters, {
+    page: String(page),
+    page_size: String(pageSize),
+    sort_by: sortBy,
+    sort_direction: sortDirection,
+  });
+  const response = await fetch(endpoint, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Daily sales breakdown request failed (${response.status}).`,
+    );
   }
 
   return response.json();

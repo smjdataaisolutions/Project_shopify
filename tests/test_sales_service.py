@@ -139,6 +139,7 @@ class SalesServiceTests(unittest.TestCase):
             {
                 "gross_sales": 0.0,
                 "discounts": 0.0,
+                "returns_refunds": 0.0,
                 "net_sales": 0.0,
                 "shipping": 0.0,
                 "taxes": 0.0,
@@ -146,6 +147,7 @@ class SalesServiceTests(unittest.TestCase):
                 "orders_count": 0,
                 "average_order_value": 0.0,
                 "currency": "USD",
+                "last_updated_at": None,
             },
         )
 

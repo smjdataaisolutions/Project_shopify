@@ -4,6 +4,10 @@
   gap: 1rem;
 }
 
+.salesKpiGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .overviewLayout {
   display: grid;
   grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);
@@ -70,6 +74,13 @@
   min-width: 0;
 }
 
+.appliedSalesFilters {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+}
+
 .inventoryContextRow {
   display: flex;
   flex-wrap: wrap;
@@ -85,6 +96,9 @@
 }
 
 @media (max-width: 768px) {
+  .salesKpiGrid {
+    grid-template-columns: 1fr;
+  }
   .inventoryViewSwitcher,
   .inventoryViewSwitcherCollapsed {
     grid-template-columns: 1fr;
@@ -97,5 +111,11 @@
   .collapsedFilters {
     justify-content: flex-start;
     padding-block-start: 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .salesKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
