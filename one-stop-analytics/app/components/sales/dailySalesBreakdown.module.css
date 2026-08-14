@@ -1,0 +1,55 @@
+.container {
+  min-width: 0;
+}
+
+.tableScroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tableScroll s-table {
+  min-width: 90rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.value {
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.deduction {
+  color: #8e1f0b;
+}
+
+.totalRow {
+  background: #f1f1f1;
+}
+
+.totalValue {
+  font-weight: 650;
+}
+
+.paginationSummary {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 1rem 0;
+  text-align: right;
+}
+
+.state {
+  min-height: 6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}

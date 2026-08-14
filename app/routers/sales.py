@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.repositories.sales_repository import SalesFilters, SalesRepository
 from app.schemas.sales import (
+    DailySalesBreakdownResponse,
     RevenueTrendResponse,
     SalesActionNeededResponse,
     SalesFilterOptionsResponse,
@@ -53,6 +54,38 @@ def get_sales_summary(
         logger.exception("Unable to retrieve the sales summary")
         raise HTTPException(
             status_code=500, detail="Unable to retrieve sales summary data."
+        ) from error
+
+
+@router.get("/daily-breakdown", response_model=DailySalesBreakdownResponse)
+def get_daily_sales_breakdown(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    sort_by: Literal[
+        "date",
+        "gross_sales",
+        "discounts",
+        "returns_refunds",
+        "net_sales",
+        "shipping",
+        "tax",
+        "total_sales",
+        "orders",
+        "average_order_value",
+    ] = Query(default="date"),
+    sort_direction: Literal["asc", "desc"] = Query(default="desc"),
+    filters: SalesFilters = Depends(get_sales_filters),
+    db: Session = Depends(get_db),
+) -> DailySalesBreakdownResponse:
+    """Return filtered daily Sales KPI metrics with complete-result totals."""
+    try:
+        return SalesService(SalesRepository(db)).get_daily_breakdown(
+            filters, page, page_size, sort_by, sort_direction
+        )
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve the daily sales breakdown")
+        raise HTTPException(
+            status_code=500, detail="Unable to retrieve daily sales breakdown."
         ) from error
 
 

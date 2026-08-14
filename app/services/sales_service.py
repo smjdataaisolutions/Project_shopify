@@ -11,6 +11,11 @@ from app.repositories.sales_repository import (
     SalesRepository,
 )
 from app.schemas.sales import (
+    DailySalesBreakdownItem,
+    DailySalesBreakdownPagination,
+    DailySalesBreakdownResponse,
+    DailySalesBreakdownSorting,
+    DailySalesBreakdownValues,
     RevenueTrendHighlights,
     RevenueTrendPoint,
     RevenueTrendResponse,
@@ -80,6 +85,7 @@ class SalesService:
         return SalesSummary(
             gross_sales=float(metrics.gross_sales or 0),
             discounts=float(metrics.discounts or 0),
+            returns_refunds=float(metrics.returns_refunds or 0),
             net_sales=float(metrics.net_sales or 0),
             shipping=float(metrics.shipping or 0),
             taxes=float(metrics.taxes or 0),
@@ -91,6 +97,7 @@ class SalesService:
                 if metrics.currency_count == 1 and metrics.currency_code
                 else None
             ),
+            last_updated_at=metrics.last_updated_at,
         )
 
     def get_filter_options(self) -> SalesFilterOptionsResponse:
@@ -104,6 +111,56 @@ class SalesService:
             ],
             order_statuses=list(options.financial_statuses),
             currencies=list(options.currency_codes),
+        )
+
+    def get_daily_breakdown(
+        self,
+        filters: SalesFilters,
+        page: int,
+        page_size: int,
+        sort_by: str,
+        sort_direction: str,
+    ) -> DailySalesBreakdownResponse:
+        result = self.repository.get_daily_breakdown(
+            filters, page, page_size, sort_by, sort_direction
+        )
+
+        def values(source) -> dict:
+            orders = source.orders
+            return {
+                "gross_sales": float(source.gross_sales),
+                "discounts": float(source.discounts),
+                "returns_refunds": float(source.returns_refunds),
+                "net_sales": float(source.net_sales),
+                "shipping": float(source.shipping),
+                "tax": float(source.tax),
+                "total_sales": float(source.total_sales),
+                "orders": orders,
+                "average_order_value": float(
+                    source.total_sales / orders if orders else Decimal("0")
+                ),
+            }
+
+        return DailySalesBreakdownResponse(
+            currency=result.currency_code,
+            items=[
+                DailySalesBreakdownItem(date=row.date, **values(row))
+                for row in result.rows
+            ],
+            summary=DailySalesBreakdownValues(**values(result)),
+            pagination=DailySalesBreakdownPagination(
+                page=page,
+                page_size=page_size,
+                total_items=result.total_items,
+                total_pages=(
+                    (result.total_items + page_size - 1) // page_size
+                    if result.total_items
+                    else 0
+                ),
+            ),
+            sorting=DailySalesBreakdownSorting(
+                sort_by=sort_by, sort_direction=sort_direction
+            ),
         )
 
     def get_revenue_trend(
