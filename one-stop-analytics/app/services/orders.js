@@ -1,6 +1,7 @@
 const ORDER_KPIS_ENDPOINT = "/api/orders/kpis";
+const ORDER_CHARTS_ENDPOINT = "/api/orders/charts";
 
-export function buildOrderKpisUrl(filters = {}) {
+function buildOrderUrl(endpoint, filters = {}) {
   const parameters = new URLSearchParams();
   if (filters.startDate) parameters.set("start_date", filters.startDate);
   if (filters.endDate) parameters.set("end_date", filters.endDate);
@@ -17,7 +18,15 @@ export function buildOrderKpisUrl(filters = {}) {
     parameters.append("payment_status", status);
   });
   const query = parameters.toString();
-  return query ? `${ORDER_KPIS_ENDPOINT}?${query}` : ORDER_KPIS_ENDPOINT;
+  return query ? `${endpoint}?${query}` : endpoint;
+}
+
+export function buildOrderKpisUrl(filters = {}) {
+  return buildOrderUrl(ORDER_KPIS_ENDPOINT, filters);
+}
+
+export function buildOrderChartsUrl(filters = {}) {
+  return buildOrderUrl(ORDER_CHARTS_ENDPOINT, filters);
 }
 
 export async function fetchOrderKpis(filters) {
@@ -27,6 +36,18 @@ export async function fetchOrderKpis(filters) {
 
   if (!response.ok) {
     throw new Error(`Order KPI request failed (${response.status}).`);
+  }
+
+  return response.json();
+}
+
+export async function fetchOrderCharts(filters) {
+  const response = await fetch(buildOrderChartsUrl(filters), {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Order charts request failed (${response.status}).`);
   }
 
   return response.json();

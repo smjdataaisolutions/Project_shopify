@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.repositories.orders_repository import OrderFilters, OrdersRepository
-from app.schemas.orders import OrderKpiResponse
+from app.schemas.orders import OrderChartsResponse, OrderKpiResponse
 from app.services.orders_service import OrdersService, build_order_filters
 
 
@@ -49,4 +49,19 @@ def get_order_kpis(
         logger.exception("Unable to retrieve Orders KPI data")
         raise HTTPException(
             status_code=500, detail="Unable to retrieve order KPI data."
+        ) from error
+
+
+@router.get("/charts", response_model=OrderChartsResponse)
+def get_order_charts(
+    filters: OrderFilters = Depends(get_order_filters),
+    db: Session = Depends(get_db),
+) -> OrderChartsResponse:
+    """Return the four filtered ORD-002 chart datasets from PostgreSQL."""
+    try:
+        return OrdersService(OrdersRepository(db)).get_charts(filters)
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve Orders chart data")
+        raise HTTPException(
+            status_code=500, detail="Unable to retrieve order chart data."
         ) from error

@@ -7,8 +7,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories.orders_repository import OrderFilters, OrderKpiAggregate
 from app.main import app
-from app.routers.orders import get_order_filters, get_order_kpis, router
-from app.schemas.orders import OrderKpiResponse
+from app.routers.orders import get_order_charts, get_order_filters, get_order_kpis, router
+from app.schemas.orders import OrderChartsResponse, OrderKpiResponse
 
 
 class OrdersApiTests(unittest.TestCase):
@@ -17,8 +17,15 @@ class OrdersApiTests(unittest.TestCase):
 
         self.assertEqual(route.response_model, OrderKpiResponse)
         self.assertIn("GET", route.methods)
-        self.assertEqual(len(router.routes), 1)
+        self.assertEqual(len(router.routes), 2)
         self.assertIn("/api/orders/kpis", app.openapi()["paths"])
+
+        chart_route = next(
+            route for route in router.routes if route.path == "/api/orders/charts"
+        )
+        self.assertEqual(chart_route.response_model, OrderChartsResponse)
+        self.assertIn("GET", chart_route.methods)
+        self.assertIn("/api/orders/charts", app.openapi()["paths"])
 
     @patch("app.routers.orders.OrdersRepository.get_kpi_aggregates")
     def test_endpoint_returns_clean_filtered_response(self, get_aggregates):
@@ -75,6 +82,17 @@ class OrdersApiTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 500)
         self.assertEqual(context.exception.detail, "Unable to retrieve order KPI data.")
+        self.assertNotIn("credentials", context.exception.detail)
+
+    @patch("app.routers.orders.OrdersRepository.get_chart_date_bounds")
+    def test_chart_endpoint_sanitizes_database_errors(self, get_bounds):
+        get_bounds.side_effect = SQLAlchemyError("database credentials")
+
+        with self.assertRaises(HTTPException) as context:
+            get_order_charts(filters=OrderFilters(), db=object())
+
+        self.assertEqual(context.exception.status_code, 500)
+        self.assertEqual(context.exception.detail, "Unable to retrieve order chart data.")
         self.assertNotIn("credentials", context.exception.detail)
 
 
