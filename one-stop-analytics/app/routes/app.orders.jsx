@@ -7,6 +7,7 @@ import {
   hasOrderFilters,
   OrdersFilters,
 } from "../components/orders/OrdersFilters";
+import { OrdersAnalytics } from "../components/orders/OrdersAnalytics";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchOrderKpis } from "../services/orders";
 import { authenticate } from "../shopify.server";
@@ -222,6 +223,12 @@ export default function Orders() {
                     <KPICard key={metric.id} {...metric} />
                   ))}
                 </div>
+              </s-section>
+              <s-section heading="Orders Analytics">
+                <OrdersAnalytics
+                  filters={filters}
+                  refreshKey={requestVersion}
+                />
               </s-section>
             </>
           ) : null}
