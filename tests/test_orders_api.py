@@ -7,8 +7,20 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories.orders_repository import OrderFilters, OrderKpiAggregate
 from app.main import app
-from app.routers.orders import get_order_charts, get_order_filters, get_order_kpis, router
-from app.schemas.orders import OrderChartsResponse, OrderKpiResponse
+from app.routers.orders import (
+    get_order_charts,
+    get_order_filters,
+    get_order_kpis,
+    get_order_performance_insights,
+    get_order_timeline,
+    router,
+)
+from app.schemas.orders import (
+    OrderChartsResponse,
+    OrderKpiResponse,
+    OrderPerformanceResponse,
+    OrderTimelineResponse,
+)
 
 
 class OrdersApiTests(unittest.TestCase):
@@ -17,7 +29,7 @@ class OrdersApiTests(unittest.TestCase):
 
         self.assertEqual(route.response_model, OrderKpiResponse)
         self.assertIn("GET", route.methods)
-        self.assertEqual(len(router.routes), 2)
+        self.assertEqual(len(router.routes), 4)
         self.assertIn("/api/orders/kpis", app.openapi()["paths"])
 
         chart_route = next(
@@ -26,6 +38,23 @@ class OrdersApiTests(unittest.TestCase):
         self.assertEqual(chart_route.response_model, OrderChartsResponse)
         self.assertIn("GET", chart_route.methods)
         self.assertIn("/api/orders/charts", app.openapi()["paths"])
+
+        performance_route = next(
+            route
+            for route in router.routes
+            if route.path == "/api/orders/performance-insights"
+        )
+        self.assertEqual(performance_route.response_model, OrderPerformanceResponse)
+        self.assertIn("GET", performance_route.methods)
+        self.assertIn("/api/orders/performance-insights", app.openapi()["paths"])
+        timeline_route = next(
+            route for route in router.routes if route.name == "get_order_timeline"
+        )
+        self.assertEqual(timeline_route.response_model, OrderTimelineResponse)
+        self.assertIn("GET", timeline_route.methods)
+        self.assertIn(
+            "/api/orders/{order_id}/timeline", app.openapi()["paths"]
+        )
 
     @patch("app.routers.orders.OrdersRepository.get_kpi_aggregates")
     def test_endpoint_returns_clean_filtered_response(self, get_aggregates):
@@ -94,6 +123,51 @@ class OrdersApiTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 500)
         self.assertEqual(context.exception.detail, "Unable to retrieve order chart data.")
         self.assertNotIn("credentials", context.exception.detail)
+
+    @patch("app.routers.orders.OrdersRepository.get_performance_insights")
+    def test_performance_endpoint_sanitizes_database_errors(self, get_performance):
+        get_performance.side_effect = SQLAlchemyError("database credentials")
+
+        with self.assertRaises(HTTPException) as context:
+            get_order_performance_insights(
+                page=1,
+                page_size=25,
+                search="",
+                sort_by="order_date",
+                sort_direction="desc",
+                filters=OrderFilters(),
+                db=object(),
+            )
+
+        self.assertEqual(context.exception.status_code, 500)
+        self.assertEqual(
+            context.exception.detail,
+            "Unable to retrieve order fulfillment detail data.",
+        )
+        self.assertNotIn("credentials", context.exception.detail)
+
+    @patch("app.routers.orders.OrdersRepository.get_timeline")
+    def test_timeline_endpoint_handles_invalid_missing_and_database_errors(
+        self, get_timeline
+    ):
+        with self.assertRaises(HTTPException) as invalid:
+            get_order_timeline(order_id="301", db=object())
+        self.assertEqual(invalid.exception.status_code, 422)
+
+        get_timeline.return_value = None
+        with self.assertRaises(HTTPException) as missing:
+            get_order_timeline(
+                order_id="gid://shopify/Order/301", db=object()
+            )
+        self.assertEqual(missing.exception.status_code, 404)
+
+        get_timeline.side_effect = SQLAlchemyError("database credentials")
+        with self.assertRaises(HTTPException) as failed:
+            get_order_timeline(
+                order_id="gid://shopify/Order/301", db=object()
+            )
+        self.assertEqual(failed.exception.status_code, 500)
+        self.assertNotIn("credentials", failed.exception.detail)
 
 
 if __name__ == "__main__":

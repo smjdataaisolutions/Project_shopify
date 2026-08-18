@@ -1,6 +1,6 @@
 from datetime import date
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.repositories.orders_repository import OrderFilters, OrdersRepository
-from app.schemas.orders import OrderChartsResponse, OrderKpiResponse
+from app.schemas.orders import (
+    OrderChartsResponse,
+    OrderKpiResponse,
+    OrderPerformanceResponse,
+    OrderTimelineResponse,
+)
 from app.services.orders_service import OrdersService, build_order_filters
 
 
@@ -65,3 +70,57 @@ def get_order_charts(
         raise HTTPException(
             status_code=500, detail="Unable to retrieve order chart data."
         ) from error
+
+
+@router.get("/performance-insights", response_model=OrderPerformanceResponse)
+def get_order_performance_insights(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    search: str = Query(default="", max_length=100),
+    sort_by: Literal[
+        "order_date",
+        "units_ordered",
+        "fulfillment_status",
+        "order_progress",
+        "fulfillment_health",
+    ] = Query(default="order_date"),
+    sort_direction: Literal["asc", "desc"] = Query(default="desc"),
+    filters: OrderFilters = Depends(get_order_filters),
+    db: Session = Depends(get_db),
+) -> OrderPerformanceResponse:
+    """Return one paginated fulfillment detail per order."""
+    try:
+        return OrdersService(OrdersRepository(db)).get_performance_insights(
+            filters,
+            page,
+            page_size,
+            search,
+            sort_by,
+            sort_direction,
+        )
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve Order Fulfillment Details")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve order fulfillment detail data.",
+        ) from error
+
+
+@router.get("/{order_id:path}/timeline", response_model=OrderTimelineResponse)
+def get_order_timeline(
+    order_id: str,
+    db: Session = Depends(get_db),
+) -> OrderTimelineResponse:
+    """Return reliable stored events for one order in the configured shop."""
+    try:
+        response = OrdersService(OrdersRepository(db)).get_timeline(order_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve Order Timeline")
+        raise HTTPException(
+            status_code=500, detail="Unable to retrieve order timeline data."
+        ) from error
+    if response is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    return response

@@ -1,8 +1,10 @@
 import os
 import unittest
+from sqlalchemy import select
 
+from app.db.models import Order
 from app.db.session import SessionLocal
-from app.repositories.orders_repository import OrdersRepository
+from app.repositories.orders_repository import OrderFilters, OrdersRepository
 from app.services.orders_service import OrdersService
 
 
@@ -41,6 +43,45 @@ class OrdersKpiPostgresTests(unittest.TestCase):
             sum(point.orders for point in charts.order_status_distribution),
             kpis.total_orders,
         )
+
+    def test_configured_postgresql_returns_distinct_performance_rows(self):
+        with SessionLocal() as db:
+            response = OrdersService(OrdersRepository(db)).get_performance_insights(
+                filters=OrderFilters(),
+                page=1,
+                page_size=100,
+                search="",
+                sort_by="order_date",
+                sort_direction="desc",
+            )
+
+        order_ids = [item.order_id for item in response.items]
+        self.assertEqual(len(order_ids), len(set(order_ids)))
+        self.assertGreaterEqual(response.pagination.total_items, len(order_ids))
+        self.assertEqual(response.meta.order_grain, "one_order")
+        self.assertFalse(response.meta.historical_fulfillment_time_supported)
+        self.assertTrue(response.meta.order_progress_age_supported)
+        self.assertFalse(response.meta.not_required_supported)
+
+    def test_configured_postgresql_returns_reliable_order_timeline(self):
+        with SessionLocal() as db:
+            order_id = db.scalar(select(Order.id).limit(1))
+            response = (
+                OrdersService(OrdersRepository(db)).get_timeline(order_id)
+                if order_id
+                else None
+            )
+
+        if order_id:
+            self.assertIsNotNone(response)
+            self.assertEqual(response.order_id, order_id)
+            self.assertEqual(
+                response.events,
+                sorted(response.events, key=lambda event: event.occurred_at),
+            )
+            self.assertFalse(
+                response.current_status.fulfillment_timestamp_available
+            )
 
 
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import Date, case, func, or_, select
 from sqlalchemy.orm import Session
@@ -46,6 +47,37 @@ class OrderDimensionAggregate:
     orders: int
 
 
+@dataclass(frozen=True)
+class OrderPerformanceRow:
+    order_id: str
+    order_name: str | None
+    order_date: datetime
+    fulfillment_status: str | None
+    cancelled_at: datetime | None
+    units_ordered: int
+
+
+@dataclass(frozen=True)
+class OrderPerformanceResult:
+    rows: list[OrderPerformanceRow]
+    total_items: int
+
+
+@dataclass(frozen=True)
+class OrderTimelineRow:
+    order_id: str
+    order_name: str | None
+    created_at: datetime | None
+    processed_at: datetime | None
+    cancelled_at: datetime | None
+    refunded_at: datetime | None
+    total_refunded: Decimal
+    refund_reason: str | None
+    financial_status: str | None
+    fulfillment_status: str | None
+    currency_code: str | None
+
+
 class OrdersRepository:
     """PostgreSQL queries for Orders analytics."""
 
@@ -88,6 +120,55 @@ class OrdersRepository:
             self._status_distribution_statement(), filters
         )
         return [OrderDimensionAggregate(*row) for row in self.db.execute(statement)]
+
+    def get_performance_insights(
+        self,
+        filters: OrderFilters,
+        page: int,
+        page_size: int,
+        search: str,
+        sort_by: str,
+        sort_direction: str,
+        current_time: datetime,
+        attention_progress_seconds: int,
+        critical_progress_seconds: int,
+    ) -> OrderPerformanceResult:
+        population = self._performance_population(filters, search)
+        summary = self.db.execute(
+            select(func.count().label("total_items")).select_from(population)
+        ).one()
+        statement = self._performance_page_statement(
+            population,
+            page,
+            page_size,
+            sort_by,
+            sort_direction,
+            current_time,
+            attention_progress_seconds,
+            critical_progress_seconds,
+        )
+        return OrderPerformanceResult(
+            rows=[OrderPerformanceRow(*row) for row in self.db.execute(statement)],
+            total_items=summary.total_items or 0,
+        )
+
+    def get_timeline(self, order_id: str) -> OrderTimelineRow | None:
+        row = self.db.execute(
+            select(
+                Order.id,
+                Order.name,
+                Order.created_at,
+                Order.processed_at,
+                Order.cancelled_at,
+                Order.refunded_at,
+                func.coalesce(Order.total_refunded, 0),
+                Order.refund_reason,
+                Order.financial_status,
+                Order.fulfillment_status,
+                Order.currency_code,
+            ).where(Order.id == order_id)
+        ).one_or_none()
+        return OrderTimelineRow(*row) if row else None
 
     @staticmethod
     def _kpi_statement():
@@ -190,6 +271,122 @@ class OrdersRepository:
             )
             .where(Order.processed_at.is_not(None))
             .group_by(status)
+        )
+
+    @classmethod
+    def _performance_population(cls, filters: OrderFilters, search: str):
+        line_items = (
+            select(
+                OrderLineItem.order_id.label("order_id"),
+                func.coalesce(func.sum(OrderLineItem.quantity), 0).label(
+                    "units_ordered"
+                ),
+            )
+            .where(OrderLineItem.order_id.is_not(None))
+            .group_by(OrderLineItem.order_id)
+            .subquery()
+        )
+        statement = (
+            select(
+                Order.id.label("order_id"),
+                Order.name.label("order_name"),
+                Order.processed_at.label("order_date"),
+                Order.fulfillment_status,
+                Order.cancelled_at,
+                func.coalesce(line_items.c.units_ordered, 0).label(
+                    "units_ordered"
+                ),
+            )
+            .select_from(Order)
+            .outerjoin(line_items, line_items.c.order_id == Order.id)
+            .where(Order.processed_at.is_not(None))
+        )
+        statement = cls._apply_filters(statement, filters)
+        if search:
+            escaped = (
+                search.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            statement = statement.where(
+                func.coalesce(Order.name, "").ilike(f"%{escaped}%", escape="\\")
+            )
+        return statement.subquery()
+
+    @staticmethod
+    def _performance_page_statement(
+        population,
+        page: int,
+        page_size: int,
+        sort_by: str,
+        sort_direction: str,
+        current_time: datetime,
+        attention_progress_seconds: int,
+        critical_progress_seconds: int,
+    ):
+        fulfillment_status = func.upper(
+            func.btrim(population.c.fulfillment_status)
+        )
+        currently_eligible = fulfillment_status.in_(
+            ("UNFULFILLED", "PARTIAL", "PARTIALLY_FULFILLED")
+        ) & population.c.cancelled_at.is_(None)
+        progress_age = case(
+            (
+                currently_eligible,
+                func.extract("epoch", current_time - population.c.order_date),
+            ),
+            else_=0,
+        )
+        fulfillment_rank = case(
+            (population.c.cancelled_at.is_not(None), 4),
+            (fulfillment_status == "FULFILLED", 3),
+            (
+                fulfillment_status.in_(("PARTIAL", "PARTIALLY_FULFILLED")),
+                2,
+            ),
+            (fulfillment_status == "UNFULFILLED", 1),
+            else_=0,
+        )
+        health_rank = case(
+            (population.c.cancelled_at.is_not(None), 4),
+            (
+                currently_eligible & (progress_age > critical_progress_seconds),
+                3,
+            ),
+            (
+                or_(
+                    fulfillment_status.in_(("PARTIAL", "PARTIALLY_FULFILLED")),
+                    progress_age > attention_progress_seconds,
+                ),
+                2,
+            ),
+            (fulfillment_status.in_(("FULFILLED", "UNFULFILLED")), 1),
+            else_=0,
+        )
+        columns = {
+            "order_date": population.c.order_date,
+            "units_ordered": population.c.units_ordered,
+            "fulfillment_status": fulfillment_rank,
+            "order_progress": progress_age,
+            "fulfillment_health": health_rank,
+        }
+        ordering = (
+            columns[sort_by].desc()
+            if sort_direction == "desc"
+            else columns[sort_by].asc()
+        )
+        return (
+            select(
+                population.c.order_id,
+                population.c.order_name,
+                population.c.order_date,
+                population.c.fulfillment_status,
+                population.c.cancelled_at,
+                population.c.units_ordered,
+            )
+            .order_by(ordering, population.c.order_id.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
 
     @staticmethod

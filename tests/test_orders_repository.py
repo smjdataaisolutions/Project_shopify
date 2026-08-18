@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 import unittest
 
 from sqlalchemy.dialects import postgresql
@@ -130,6 +130,90 @@ class OrdersRepositoryTests(unittest.TestCase):
 
         self.assertIn("min(CAST(timezone('UTC', orders.processed_at) AS DATE))", sql)
         self.assertIn("max(CAST(timezone('UTC', orders.processed_at) AS DATE))", sql)
+
+    def test_performance_population_is_one_row_per_order_with_grouped_units(self):
+        population = OrdersRepository._performance_population(
+            OrderFilters(
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 17),
+                payment_statuses=("PAID",),
+            ),
+            "#10%_",
+        )
+        sql = str(
+            population.select().compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+
+        self.assertIn("sum(order_line_items.quantity)", sql)
+        self.assertIn("GROUP BY order_line_items.order_id", sql)
+        self.assertNotIn("orders.subtotal_price", sql)
+        self.assertNotIn("orders.total_discount", sql)
+        self.assertNotIn("orders.total_refunded", sql)
+        self.assertNotIn("refund_transactions", sql)
+        self.assertIn("orders.processed_at >= '2026-08-01'", sql)
+        self.assertIn("orders.processed_at < '2026-08-18'", sql)
+        self.assertIn("orders.financial_status IN ('PAID')", sql)
+        self.assertIn("LIKE", sql)
+        self.assertIn("ESCAPE", sql)
+
+    def test_performance_page_applies_server_sort_and_pagination(self):
+        population = OrdersRepository._performance_population(OrderFilters(), "")
+        statement = OrdersRepository._performance_page_statement(
+            population,
+            page=3,
+            page_size=25,
+            sort_by="order_progress",
+            sort_direction="desc",
+            current_time=datetime(2026, 8, 18, tzinfo=timezone.utc),
+            attention_progress_seconds=2 * 86400,
+            critical_progress_seconds=5 * 86400,
+        )
+        sql = str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+
+        self.assertIn("ORDER BY CASE", sql)
+        self.assertIn("DESC", sql)
+        self.assertIn("LIMIT 25 OFFSET 50", sql)
+        self.assertIn("EXTRACT(epoch FROM", sql)
+        self.assertNotIn("updated_at", sql)
+
+    def test_timeline_query_is_single_order_grain_without_event_joins(self):
+        class CapturingDb:
+            def __init__(self):
+                self.statement = None
+
+            def execute(self, statement):
+                self.statement = statement
+                return self
+
+            def one_or_none(self):
+                return None
+
+        db = CapturingDb()
+        repository = OrdersRepository(db)
+
+        self.assertIsNone(repository.get_timeline("gid://shopify/Order/301"))
+        sql = str(
+            db.statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        self.assertIn("orders.created_at", sql)
+        self.assertIn("orders.processed_at", sql)
+        self.assertIn("orders.cancelled_at", sql)
+        self.assertIn("orders.refunded_at", sql)
+        self.assertIn("orders.total_refunded", sql)
+        self.assertIn("orders.id = 'gid://shopify/Order/301'", sql)
+        self.assertNotIn("JOIN", sql)
+        self.assertNotIn("orders.updated_at", sql)
 
 
 if __name__ == "__main__":
