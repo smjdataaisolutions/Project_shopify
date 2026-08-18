@@ -8,6 +8,7 @@ import {
   OrdersFilters,
 } from "../components/orders/OrdersFilters";
 import { OrdersAnalytics } from "../components/orders/OrdersAnalytics";
+import { OrderPerformanceInsights } from "../components/orders/OrderPerformanceInsights";
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchOrderKpis } from "../services/orders";
 import { authenticate } from "../shopify.server";
@@ -226,6 +227,12 @@ export default function Orders() {
               </s-section>
               <s-section heading="Orders Analytics">
                 <OrdersAnalytics
+                  filters={filters}
+                  refreshKey={requestVersion}
+                />
+              </s-section>
+              <s-section heading="Order Fulfillment Details">
+                <OrderPerformanceInsights
                   filters={filters}
                   refreshKey={requestVersion}
                 />
