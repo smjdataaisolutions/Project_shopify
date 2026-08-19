@@ -6,16 +6,29 @@ export function KPICard({
   id,
   label,
   value,
+  supportingText,
+  imageUrl,
+  imageAlt,
   definition = [],
   onClick,
   accessibilityLabel,
 }) {
   const tooltipId = `${id || label.toLowerCase().replaceAll(" ", "-")}-formula`;
   const content = (
-    <s-stack direction="block" gap="small">
-      <s-text tone="subdued">{label}</s-text>
-      <s-heading>{value}</s-heading>
-    </s-stack>
+    <div className={styles.contentRow}>
+      <s-stack direction="block" gap="small">
+        <s-text tone="subdued">{label}</s-text>
+        <s-heading>{value}</s-heading>
+        {supportingText ? <s-text tone="subdued">{supportingText}</s-text> : null}
+      </s-stack>
+      {imageUrl ? (
+        <img className={styles.productImage} src={imageUrl} alt={imageAlt || ""} />
+      ) : imageAlt ? (
+        <div className={styles.imagePlaceholder} aria-label={`${imageAlt} image unavailable`}>
+          No image
+        </div>
+      ) : null}
+    </div>
   );
 
   return (
@@ -38,7 +51,9 @@ export function KPICard({
         ) : content}
 
         {definition.length ? (
-          <div className={styles.infoButton}>
+          <div
+            className={`${styles.infoButton} ${imageAlt ? styles.infoButtonWithMedia : ""}`}
+          >
             <s-button
               icon="info"
               variant="tertiary"

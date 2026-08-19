@@ -8,6 +8,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.productKpiGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .overviewLayout {
   display: grid;
   grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);
@@ -99,6 +103,9 @@
   .salesKpiGrid {
     grid-template-columns: 1fr;
   }
+  .productKpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .inventoryViewSwitcher,
   .inventoryViewSwitcherCollapsed {
     grid-template-columns: 1fr;
@@ -116,6 +123,9 @@
 
 @media (min-width: 769px) and (max-width: 1100px) {
   .salesKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .productKpiGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

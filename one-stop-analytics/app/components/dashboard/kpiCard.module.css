@@ -3,6 +3,43 @@
   min-height: 4rem;
 }
 
+.contentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4.5rem;
+}
+
+.contentRow > :first-child {
+  min-width: 0;
+}
+
+.productImage,
+.imagePlaceholder {
+  flex: 0 0 3.25rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.5rem;
+}
+
+.productImage {
+  display: block;
+  object-fit: cover;
+  border: 1px solid var(--p-color-border-secondary, #e1e3e5);
+}
+
+.imagePlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 0.25rem;
+  background: var(--p-color-bg-surface-secondary, #f1f2f3);
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .cardButton {
   display: block;
   width: 100%;
@@ -31,4 +68,8 @@
   top: -0.25rem;
   right: -0.25rem;
   z-index: 1;
+}
+
+.infoButtonWithMedia {
+  right: 3.5rem;
 }
