@@ -1,0 +1,141 @@
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  min-width: 0;
+  min-height: 22rem;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dimensionControl {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #616161;
+  font-size: 0.75rem;
+}
+
+.dimensionControl select {
+  min-width: 8rem;
+  padding: 0.35rem 1.75rem 0.35rem 0.5rem;
+  border: 1px solid #8a8a8a;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #303030;
+}
+
+.state {
+  display: flex;
+  min-height: 17rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.chartScroller {
+  width: 100%;
+  margin-top: auto;
+  overflow-x: auto;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  min-width: 31rem;
+  height: auto;
+}
+
+.dimensionChart {
+  min-width: 20rem;
+}
+
+.gridLine {
+  stroke: #e1e3e5;
+  stroke-width: 1;
+}
+
+.bar {
+  fill: #2c6ecb;
+}
+
+.revenueBar {
+  fill: #008060;
+}
+
+.contributionBar {
+  fill: #7c5cfc;
+}
+
+.bar:focus,
+.revenueBar:focus,
+.contributionBar:focus {
+  outline: none;
+  stroke: #005bd3;
+  stroke-width: 3;
+}
+
+.axisText,
+.productAxisLabel,
+.valueLabel {
+  fill: #616161;
+  font-size: 11px;
+}
+
+.horizontalLabel,
+.horizontalValue {
+  fill: #616161;
+  font-size: 11px;
+}
+
+.horizontalValue {
+  fill: #303030;
+  font-weight: 600;
+}
+
+.valueLabel {
+  fill: #303030;
+  font-weight: 600;
+}
+
+.axisLabel {
+  fill: #303030;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.screenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .chartGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cardHeader {
+    flex-direction: column;
+  }
+}

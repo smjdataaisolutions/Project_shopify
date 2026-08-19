@@ -17,6 +17,9 @@ class Product(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     vendor: Mapped[str | None] = mapped_column(String, nullable=True)
+    product_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     variants: Mapped[list["ProductVariant"]] = relationship(back_populates="product")
 
 
