@@ -1,0 +1,40 @@
+.explorer { display: grid; gap: 1rem; }
+.controls { display: grid; grid-template-columns: repeat(3, minmax(0, 16rem)); gap: 1rem; align-items: end; }
+.field { display: grid; gap: 0.35rem; color: var(--p-color-text, #202223); font-size: 0.8125rem; font-weight: 600; }
+.field select { width: 100%; min-height: 2.25rem; padding: 0.45rem 2rem 0.45rem 0.75rem; color: inherit; background: var(--p-color-bg-surface, #fff); border: 1px solid var(--p-color-border, #8c9196); border-radius: 0.5rem; font: inherit; }
+.field select:focus { outline: 2px solid var(--p-color-border-focus, #005bd3); outline-offset: 1px; }
+.dataNote { margin: -0.4rem 0 0; color: var(--p-color-text-secondary, #616161); font-size: 0.75rem; }
+.chartShell { min-height: 18rem; overflow-x: auto; border-top: 1px solid var(--p-color-border-secondary, #e1e3e5); padding-top: 0.75rem; }
+.state { min-height: 17rem; display: flex; gap: 0.75rem; align-items: center; justify-content: center; text-align: center; }
+.chart { display: block; width: 100%; min-width: 38rem; max-height: 25rem; overflow: visible; }
+.gridLine { stroke: var(--p-color-border-secondary, #e1e3e5); stroke-width: 1; }
+.axisLine { stroke: var(--p-color-border, #8c9196); stroke-width: 1; }
+.line { fill: none; stroke: var(--p-color-bg-fill-success, #008060); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.comparisonLine { fill: none; stroke: #7c5cc4; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 7 5; }
+.point { fill: var(--p-color-bg-surface, #fff); stroke: var(--p-color-bg-fill-success, #008060); stroke-width: 2; }
+.comparisonPoint { fill: var(--p-color-bg-surface, #fff); stroke: #7c5cc4; stroke-width: 2; }
+.bar { fill: var(--p-color-bg-fill-success, #008060); }
+.comparisonBar { fill: #7c5cc4; opacity: 0.82; }
+.axisTick, .productLabel, .barValue { fill: var(--p-color-text-secondary, #616161); font-size: 12px; }
+.productLabel { fill: var(--p-color-text, #202223); }
+.barValue { font-weight: 600; }
+.dataLabel { fill: var(--p-color-text, #202223); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--p-color-bg-surface, #fff); stroke-width: 3px; stroke-linejoin: round; }
+.comparisonDataLabel { composes: dataLabel; fill: #5b3f9e; }
+.axisLabel { fill: var(--p-color-text, #202223); font-size: 13px; font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 1rem; padding: 0.5rem 0.5rem 0; color: var(--p-color-text-secondary, #616161); font-size: 0.75rem; }
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend i { width: 1.25rem; height: 0.2rem; border-radius: 999px; }
+.currentSwatch { background: var(--p-color-bg-fill-success, #008060); }
+.comparisonSwatch { background: #7c5cc4; }
+.summary { display: grid; grid-template-columns: minmax(12rem, 0.7fr) minmax(18rem, 1.3fr); gap: 1rem; padding: 0.75rem 0.5rem 1rem; }
+.summaryMetric { display: grid; align-content: start; gap: 0.2rem; }
+.summaryLabel, .previousValue, .periods span { color: var(--p-color-text-secondary, #616161); font-size: 0.75rem; }
+.summaryValue { color: var(--p-color-text, #202223); font-size: 1.5rem; line-height: 1.25; }
+.change { color: var(--p-color-text-success, #008060); font-size: 0.8125rem; font-weight: 600; }
+.negative { color: var(--p-color-text-critical, #d72c0d); }
+.periods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.periods div { display: grid; gap: 0.25rem; padding: 0.65rem; background: var(--p-color-bg-surface-secondary, #f6f6f7); border-radius: 0.5rem; }
+.periods strong { font-size: 0.8125rem; }
+.durationNote { grid-column: 1 / -1; margin: 0; color: var(--p-color-text-secondary, #616161); font-size: 0.75rem; }
+@media (max-width: 640px) { .controls { grid-template-columns: 1fr; } .chart { width: 42rem; } }
+@media (max-width: 760px) { .summary { grid-template-columns: 1fr; } .periods { grid-template-columns: 1fr; } }

@@ -5,6 +5,7 @@ import { fetchLastSevenDaysPerformance } from "../app/services/dashboard.js";
 import {
   activateWithKeyboard,
   comparisonPresentation,
+  currencyFormatter,
   focusDailyPerformance,
   formatShortDate,
 } from "../app/utils/lastSevenDaysPerformance.js";
@@ -17,13 +18,20 @@ test("formats all seven UTC date labels consistently", () => {
   ]);
 });
 
+test("falls back to USD when the currency code is missing or invalid", () => {
+  assert.equal(currencyFormatter(null).resolvedOptions().currency, "USD");
+  assert.equal(currencyFormatter("").resolvedOptions().currency, "USD");
+  assert.equal(currencyFormatter("invalid").resolvedOptions().currency, "USD");
+  assert.equal(currencyFormatter(" inr ").resolvedOptions().currency, "INR");
+});
+
 test("formats increase, decline, no-change, and new-activity summaries", () => {
   assert.equal(comparisonPresentation({
     status: "increase", percentage_change: 18.4,
   }).text, "18.4% vs previous 7 days");
   assert.equal(comparisonPresentation({
     status: "decline", percentage_change: -100,
-  }).symbol, "â†“");
+  }).symbol, "↓");
   assert.equal(comparisonPresentation({
     status: "new_activity", percentage_change: null,
   }).text, "New sales activity");

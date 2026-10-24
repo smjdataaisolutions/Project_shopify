@@ -1,7 +1,9 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { forwardAnalyticsWebhook } from "../services/shopify-webhook-proxy.server";
 
 export const action = async ({ request }) => {
+  const analyticsRequest = request.clone();
   const { shop, session, topic } = await authenticate.webhook(request);
 
   console.log(`Received ${topic} webhook for ${shop}`);
@@ -12,5 +14,8 @@ export const action = async ({ request }) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
-  return new Response();
+  return forwardAnalyticsWebhook({
+    request: analyticsRequest,
+    authenticateWebhook: async () => ({ shop }),
+  });
 };

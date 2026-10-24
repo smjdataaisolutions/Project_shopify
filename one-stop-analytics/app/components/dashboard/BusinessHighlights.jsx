@@ -1,18 +1,24 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { fetchBusinessHighlights } from "../../services/dashboard";
+import {
+  getHighlightDestination,
+  getHighlightPresentation,
+} from "../../utils/businessHighlights";
 import styles from "./businessHighlights.module.css";
 
-const SEVERITY_PRESENTATION = {
-  positive: { label: "Healthy", tone: "success" },
-  info: { label: "Information", tone: "info" },
-  warning: { label: "Needs attention", tone: "caution" },
-  critical: { label: "Critical", tone: "critical" },
-};
-
-function HighlightCard({ highlight }) {
-  const presentation = SEVERITY_PRESENTATION[highlight.severity]
-    || SEVERITY_PRESENTATION.info;
+function HighlightCard({ highlight, onViewDailyPerformance }) {
+  const navigate = useNavigate();
+  const presentation = getHighlightPresentation(highlight.status);
+  const handleAction = () => {
+    if (highlight.id === "sales_momentum") {
+      onViewDailyPerformance();
+      return;
+    }
+    const destination = getHighlightDestination(highlight.id);
+    if (destination) navigate(destination);
+  };
 
   return (
     <s-box
@@ -21,7 +27,7 @@ function HighlightCard({ highlight }) {
       borderRadius="base"
       background="base"
     >
-      <s-stack direction="block" gap="base">
+      <div className={styles.cardContent}>
         <div className={styles.cardHeader}>
           <s-heading>{highlight.title}</s-heading>
           <s-badge tone={presentation.tone}>{presentation.label}</s-badge>
@@ -30,12 +36,18 @@ function HighlightCard({ highlight }) {
         {highlight.supporting_text ? (
           <s-text tone="subdued">{highlight.supporting_text}</s-text>
         ) : null}
-      </s-stack>
+        {highlight.helper_text ? (
+          <s-text tone="subdued">{highlight.helper_text}</s-text>
+        ) : null}
+        <div className={styles.action}>
+          <s-button onClick={handleAction}>{highlight.action_label}</s-button>
+        </div>
+      </div>
     </s-box>
   );
 }
 
-export function BusinessHighlights({ filters }) {
+export function BusinessHighlights({ filters, onViewDailyPerformance }) {
   const [highlights, setHighlights] = useState(null);
   const [error, setError] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -71,20 +83,13 @@ export function BusinessHighlights({ filters }) {
 
   if (!highlights) {
     return (
-      <div className={styles.state}>
-        <s-spinner accessibilityLabel="Loading business highlights" />
-        <s-text>Generating business highlights…</s-text>
-      </div>
-    );
-  }
-
-  if (!highlights.length) {
-    return (
-      <div className={styles.state}>
-        <s-text>
-          Business highlights will appear when sufficient sales, inventory,
-          and product data is available.
-        </s-text>
+      <div className={styles.grid} aria-label="Loading business highlights">
+        {[0, 1, 2].map((index) => (
+          <div className={styles.loadingCard} key={index}>
+            <s-spinner accessibilityLabel="Loading business highlight" />
+            <s-text>Generating insight…</s-text>
+          </div>
+        ))}
       </div>
     );
   }
@@ -92,7 +97,11 @@ export function BusinessHighlights({ filters }) {
   return (
     <div className={styles.grid}>
       {highlights.map((highlight) => (
-        <HighlightCard key={highlight.id} highlight={highlight} />
+        <HighlightCard
+          key={highlight.id}
+          highlight={highlight}
+          onViewDailyPerformance={onViewDailyPerformance}
+        />
       ))}
     </div>
   );

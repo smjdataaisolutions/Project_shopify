@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useSearchParams } from "react-router";
 import {
   AppliedInventoryFilters,
   EMPTY_INVENTORY_FILTERS,
@@ -12,6 +13,7 @@ import { AnalyticsTopNavigation } from "../components/navigation/AnalyticsTopNav
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchInventoryKpis } from "../services/inventory";
 import { authenticate } from "../shopify.server";
+import { getInventoryNavigationState } from "../utils/overviewNavigation";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -120,13 +122,17 @@ function InventoryKpiCard({ id, label, value, definition }) {
 }
 
 export default function Inventory() {
-  const [inventoryLevel, setInventoryLevel] = useState("variant");
+  const [searchParams] = useSearchParams();
+  const initialNavigationState = getInventoryNavigationState(searchParams);
+  const [inventoryLevel, setInventoryLevel] = useState(
+    initialNavigationState.level,
+  );
   const [areFiltersCollapsed, setAreFiltersCollapsed] = useState(false);
   const [filters, setFilters] = useState(() => ({
     ...EMPTY_INVENTORY_FILTERS,
     locationIds: [],
     vendors: [],
-    inventoryStatuses: [],
+    inventoryStatuses: initialNavigationState.inventoryStatuses,
   }));
   const [filterOptions, setFilterOptions] = useState(null);
   const [kpis, setKpis] = useState(null);

@@ -14,27 +14,15 @@ test("supports loading, error, empty, and ready table states", () => {
     "loading",
   );
   assert.equal(
-    getDailySalesBreakdownState({
-      isLoading: false,
-      result: null,
-      error: "failed",
-    }),
+    getDailySalesBreakdownState({ isLoading: false, result: null, error: "failed" }),
     "error",
   );
   assert.equal(
-    getDailySalesBreakdownState({
-      isLoading: false,
-      result: { items: [] },
-      error: null,
-    }),
+    getDailySalesBreakdownState({ isLoading: false, result: { items: [] }, error: null }),
     "empty",
   );
   assert.equal(
-    getDailySalesBreakdownState({
-      isLoading: false,
-      result: { items: [{ date: "2026-08-12" }] },
-      error: null,
-    }),
+    getDailySalesBreakdownState({ isLoading: false, result: { items: [{ date: "2026-08-12" }] }, error: null }),
     "ready",
   );
 });
@@ -129,7 +117,7 @@ test("shows PostgreSQL synchronization time and refreshes every Sales section", 
   assert.ok(route.includes("formatOverviewUpdatedAt(lastUpdatedAt)"));
   assert.ok(route.includes('icon="refresh"'));
   assert.ok(route.includes("Refresh Sales analytics"));
-  assert.ok(route.includes("trend:${requestVersion}"));
+  assert.ok(route.includes("explorer:${requestVersion}"));
   assert.ok(route.includes("actions:${requestVersion}"));
   assert.ok(route.includes("breakdown:${requestVersion}"));
 });

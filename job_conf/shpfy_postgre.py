@@ -11,7 +11,9 @@ from psycopg.types.json import Jsonb
 STORE = os.environ["SHOPIFY_STORE"]
 TOKEN = os.environ["SHOPIFY_ACCESS_TOKEN"]
 API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2026-10")
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.environ["DATABASE_URL"].replace(
+    "postgresql+psycopg://", "postgresql://", 1
+)
 PAGE_SIZE = 100
 
 GRAPHQL_URL = f"https://{STORE}/admin/api/{API_VERSION}/graphql.json"
@@ -19,7 +21,10 @@ GRAPHQL_URL = f"https://{STORE}/admin/api/{API_VERSION}/graphql.json"
 PRODUCTS_QUERY = """
 query Products($first: Int!, $after: String) {
   products(first: $first, after: $after) {
-    nodes { id title handle status vendor productType tags createdAt updatedAt }
+    nodes {
+      id title handle status vendor productType tags createdAt updatedAt
+      featuredImage { url }
+    }
     pageInfo { hasNextPage endCursor }
   }
 }
@@ -112,10 +117,12 @@ query Orders($first: Int!, $after: String) {
 }
 """
 
-DDL = """
+# Historical reference only. Runtime execution was removed in MT-001; reviewed
+# migrations under migrations/analytics are the sole schema-change mechanism.
+LEGACY_SINGLE_TENANT_DDL = """
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY, title TEXT, handle TEXT, status TEXT, vendor TEXT,
-  product_type TEXT, tags JSONB, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+  product_type TEXT, image_url TEXT, tags JSONB, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
@@ -162,6 +169,7 @@ HAVING MAX(updated_at) IS NOT NULL
 ON CONFLICT (source) DO NOTHING;
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax NUMERIC;
@@ -178,6 +186,14 @@ CREATE TABLE IF NOT EXISTS order_line_items (
   fulfillable_quantity INTEGER, unit_price NUMERIC, currency_code TEXT
 );
 """
+
+
+def env_flag(name, default=False):
+    """Return a strict boolean environment flag without enabling it accidentally."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def graphql(query, variables):
@@ -216,56 +232,58 @@ def upsert(cursor, table, row, key_columns):
     cursor.execute(sql, [row[column] for column in columns])
 
 
-def sync_products(cursor):
+def sync_products(cursor, shop_id):
     for product in paginate(PRODUCTS_QUERY, "products"):
+        featured_image = product.get("featuredImage") or {}
         upsert(cursor, "products", {
-            "id": product["id"], "title": product.get("title"),
+            "shop_id": shop_id, "id": product["id"], "title": product.get("title"),
             "handle": product.get("handle"), "status": product.get("status"),
             "vendor": product.get("vendor"), "product_type": product.get("productType"),
+            "image_url": featured_image.get("url"),
             "tags": Jsonb(product.get("tags", [])), "created_at": product.get("createdAt"),
             "updated_at": product.get("updatedAt"),
-        }, ["id"])
+        }, ["shop_id", "id"])
 
 
-def sync_variants(cursor):
+def sync_variants(cursor, shop_id):
     for variant in paginate(VARIANTS_QUERY, "productVariants"):
         product = variant.get("product") or {}
         item = variant.get("inventoryItem") or {}
         upsert(cursor, "product_variants", {
-            "id": variant["id"], "product_id": product.get("id"),
+            "shop_id": shop_id, "id": variant["id"], "product_id": product.get("id"),
             "title": variant.get("title"), "sku": variant.get("sku"),
             "barcode": variant.get("barcode"),
             "price": Decimal(variant["price"]) if variant.get("price") else None,
             "inventory_policy": variant.get("inventoryPolicy"),
             "inventory_quantity": variant.get("inventoryQuantity"),
             "inventory_item_id": item.get("id"), "inventory_tracked": item.get("tracked"),
-        }, ["id"])
+        }, ["shop_id", "id"])
 
 
-def sync_inventory(cursor):
+def sync_inventory(cursor, shop_id):
     for item in paginate(INVENTORY_QUERY, "inventoryItems"):
         for level in item["inventoryLevels"]["nodes"]:
             location = level["location"]
             upsert(cursor, "inventory", {
-                "inventory_item_id": item["id"], "location_id": location["id"],
+                "shop_id": shop_id, "inventory_item_id": item["id"], "location_id": location["id"],
                 "location_name": location.get("name"), "sku": item.get("sku"),
                 "tracked": item.get("tracked"), "requires_shipping": item.get("requiresShipping"),
                 "quantities": Jsonb(level.get("quantities", [])), "updated_at": item.get("updatedAt"),
-            }, ["inventory_item_id", "location_id"])
+            }, ["shop_id", "inventory_item_id", "location_id"])
 
 
-def sync_locations(cursor):
+def sync_locations(cursor, shop_id):
     for location in paginate(LOCATIONS_QUERY, "locations"):
         upsert(cursor, "locations", {
-            "id": location["id"], "name": location.get("name"),
+            "shop_id": shop_id, "id": location["id"], "name": location.get("name"),
             "is_active": location.get("isActive"),
             "fulfills_online_orders": location.get("fulfillsOnlineOrders"),
             "has_active_inventory": location.get("hasActiveInventory"),
             "address": Jsonb(location["address"]) if location.get("address") else None,
-        }, ["id"])
+        }, ["shop_id", "id"])
 
 
-def sync_orders(cursor):
+def sync_orders(cursor, shop_id):
     for order in paginate(ORDERS_QUERY, "orders"):
         def shop_money_amount(field_name):
             money = (order.get(field_name) or {}).get("shopMoney") or {}
@@ -282,7 +300,7 @@ def sync_orders(cursor):
         ))
 
         upsert(cursor, "orders", {
-            "id": order["id"], "name": order.get("name"),
+            "shop_id": shop_id, "id": order["id"], "name": order.get("name"),
             "created_at": order.get("createdAt"), "processed_at": order.get("processedAt"),
             "cancelled_at": order.get("cancelledAt"),
             "refunded_at": max(refund_dates) if refund_dates else None,
@@ -297,39 +315,64 @@ def sync_orders(cursor):
             "total_price": shop_money_amount("totalPriceSet"),
             "total_refunded": shop_money_amount("totalRefundedSet"),
             "refund_reason": " | ".join(refund_notes) or None,
-        }, ["id"])
+        }, ["shop_id", "id"])
 
         for line in order["lineItems"]["nodes"]:
             variant = line.get("variant") or {}
             product = variant.get("product") or {}
             money = (line.get("originalUnitPriceSet") or {}).get("shopMoney") or {}
             upsert(cursor, "order_line_items", {
-                "id": line["id"], "order_id": order["id"],
+                "shop_id": shop_id, "id": line["id"], "order_id": order["id"],
                 "product_id": product.get("id"), "variant_id": variant.get("id"),
                 "title": line.get("title"), "sku": line.get("sku"),
                 "quantity": line.get("quantity"), "current_quantity": line.get("currentQuantity"),
                 "fulfillable_quantity": line.get("fulfillableQuantity"),
                 "unit_price": Decimal(money["amount"]) if money.get("amount") else None,
                 "currency_code": money.get("currencyCode"),
-            }, ["id"])
+            }, ["shop_id", "id"])
+
+
+def resolve_shop_id(cursor):
+    row = cursor.execute(
+        """
+        SELECT id
+        FROM shops
+        WHERE shop_domain = %s AND status = 'active'
+        """,
+        (STORE.strip().lower(),),
+    ).fetchone()
+    if not row:
+        raise RuntimeError("Shop is not registered as an active analytics tenant.")
+    return row[0]
 
 
 def main():
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cursor:
-            cursor.execute(DDL)
-            sync_products(cursor)
-            sync_variants(cursor)
-            sync_locations(cursor)
-            sync_inventory(cursor)
-            sync_orders(cursor)
+            shop_id = resolve_shop_id(cursor)
+            sync_products(cursor, shop_id)
+            sync_variants(cursor, shop_id)
+            sync_locations(cursor, shop_id)
+            sync_inventory(cursor, shop_id)
+            sync_orders(cursor, shop_id)
             cursor.execute(
                 """
-                INSERT INTO shopify_sync_state (source, last_successful_sync_at)
-                VALUES ('shopify', clock_timestamp())
-                ON CONFLICT (source) DO UPDATE SET
+                INSERT INTO shopify_sync_state (shop_id, source, last_successful_sync_at)
+                VALUES (%s, 'shopify', clock_timestamp())
+                ON CONFLICT (shop_id, source) DO UPDATE SET
                   last_successful_sync_at = EXCLUDED.last_successful_sync_at
+                """,
+                (shop_id,),
+            )
+            cursor.execute(
                 """
+                UPDATE shops
+                SET sync_status = 'completed',
+                    last_synced_at = clock_timestamp(),
+                    updated_at = clock_timestamp()
+                WHERE id = %s
+                """,
+                (shop_id,),
             )
         conn.commit()
     print("Shopify non-PII data synchronized to PostgreSQL.")

@@ -32,7 +32,7 @@ function LoadingCards() {
           <ChartCard key={title} title={title}>
             <div className={styles.loading}>
               <s-spinner accessibilityLabel={`Loading ${title}`} />
-              <s-text>Loading chartâ€¦</s-text>
+              <s-text>Loading chart…</s-text>
             </div>
           </ChartCard>
         ),
@@ -246,7 +246,7 @@ function TopProductsChart({ data, currencyCode, onSelectProduct }) {
                   textAnchor="end"
                 >
                   {product.product_name.length > 18
-                    ? `${product.product_name.slice(0, 17)}â€¦`
+                    ? `${product.product_name.slice(0, 17)}…`
                     : product.product_name}
                   <title>{product.product_name}</title>
                 </text>
@@ -378,7 +378,7 @@ function RevenueComparisonChart({ data, period, currencyCode, onSelectCurrent })
             const x = 130 + index * 180;
             const barHeight = (bar.amount / maximum) * graphHeight;
             const y = 15 + graphHeight - barHeight;
-            const tooltip = `${bar.label}; ${formatFullDate(bar.start)}â€“${formatFullDate(bar.end)}; Total Revenue: ${money.format(bar.amount)}`;
+            const tooltip = `${bar.label}; ${formatFullDate(bar.start)}–${formatFullDate(bar.end)}; Total Revenue: ${money.format(bar.amount)}`;
             return (
               <g key={bar.key}>
                 <rect

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import Date, func, or_, select
+from sqlalchemy import Date, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Order, OrderLineItem, ShopifySyncState
@@ -79,6 +79,24 @@ class SalesFilterOptions:
     sales_channels: tuple[str, ...]
     financial_statuses: tuple[str, ...]
     currency_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SalesChartAggregateRow:
+    id: str
+    label: date | str
+    revenue: Decimal
+    orders: int
+    units_sold: int
+
+
+@dataclass(frozen=True)
+class SalesChartResult:
+    rows: list[SalesChartAggregateRow]
+    currency_code: str | None
+    total_revenue: Decimal = Decimal("0")
+    total_orders: int = 0
+    total_units_sold: int = 0
 
 
 class SalesRepository:
@@ -282,7 +300,7 @@ class SalesRepository:
         filters: SalesFilters,
     ) -> list[tuple[date, Decimal, str | None]]:
         """Return daily revenue aggregates ordered by the Shopify processed date."""
-        period = func.date_trunc("day", Order.processed_at).cast(Date).label("period")
+        period = func.timezone("UTC", Order.processed_at).cast(Date).label("period")
         statement = (
             select(
                 period,
@@ -297,6 +315,184 @@ class SalesRepository:
         statement = self._apply_filters(statement, filters)
 
         return list(self.db.execute(statement).all())
+
+    def get_sales_chart(
+        self,
+        filters: SalesFilters,
+        dimension: str,
+        measure: str,
+        product_ids: tuple[str, ...] | None = None,
+    ) -> SalesChartResult:
+        """Aggregate an allowlisted Sales Explorer selection in PostgreSQL."""
+        statement = (
+            self._product_chart_statement(filters, measure, product_ids)
+            if dimension == "product"
+            else self._order_chart_statement(filters, dimension)
+        )
+        rows = [SalesChartAggregateRow(*row) for row in self.db.execute(statement)]
+        totals = self.db.execute(self._chart_totals_statement(filters)).one()
+        return SalesChartResult(
+            rows=rows,
+            currency_code=(
+                totals.currency_code
+                if totals.currency_count == 1
+                else None
+            ),
+            total_revenue=totals.revenue or Decimal("0"),
+            total_orders=totals.orders or 0,
+            total_units_sold=totals.units_sold or 0,
+        )
+
+    def _chart_totals_statement(self, filters: SalesFilters):
+        units_by_order = (
+            select(
+                OrderLineItem.order_id.label("order_id"),
+                func.coalesce(func.sum(OrderLineItem.quantity), 0).label("units"),
+            )
+            .group_by(OrderLineItem.order_id)
+            .subquery()
+        )
+        statement = (
+            select(
+                func.coalesce(func.sum(Order.total_price), 0).label("revenue"),
+                func.count(func.distinct(Order.id)).label("orders"),
+                func.coalesce(func.sum(units_by_order.c.units), 0).label(
+                    "units_sold"
+                ),
+                func.max(Order.currency_code).label("currency_code"),
+                func.count(func.distinct(Order.currency_code)).label(
+                    "currency_count"
+                ),
+            )
+            .select_from(Order)
+            .outerjoin(units_by_order, units_by_order.c.order_id == Order.id)
+            .where(Order.processed_at.is_not(None))
+        )
+        return self._apply_filters(statement, filters)
+
+    def _order_chart_statement(self, filters: SalesFilters, dimension: str):
+        units_by_order = (
+            select(
+                OrderLineItem.order_id.label("order_id"),
+                func.coalesce(func.sum(OrderLineItem.quantity), 0).label("units"),
+            )
+            .group_by(OrderLineItem.order_id)
+            .subquery()
+        )
+        if dimension == "processed_date":
+            group_value = func.timezone("UTC", Order.processed_at).cast(Date)
+            identifier = group_value
+            label = group_value
+        else:
+            group_value = func.coalesce(func.nullif(func.btrim(Order.sales_channel), ""), "unknown")
+            identifier = group_value
+            label = group_value
+
+        statement = (
+            select(
+                identifier.label("id"),
+                label.label("label"),
+                func.coalesce(func.sum(Order.total_price), 0).label("revenue"),
+                func.count(func.distinct(Order.id)).label("orders"),
+                func.coalesce(func.sum(units_by_order.c.units), 0).label(
+                    "units_sold"
+                ),
+            )
+            .select_from(Order)
+            .outerjoin(units_by_order, units_by_order.c.order_id == Order.id)
+            .where(Order.processed_at.is_not(None))
+            .group_by(group_value)
+        )
+        statement = self._apply_filters(statement, filters)
+        return (
+            statement.order_by(group_value.asc())
+            if dimension == "processed_date"
+            else statement.order_by(func.sum(Order.total_price).desc(), group_value.asc())
+        )
+
+    def _product_chart_statement(
+        self,
+        filters: SalesFilters,
+        measure: str,
+        product_ids: tuple[str, ...] | None = None,
+    ):
+        line_value = (
+            func.coalesce(OrderLineItem.unit_price, 0)
+            * func.coalesce(OrderLineItem.quantity, 0)
+        )
+        order_line_totals = (
+            select(
+                OrderLineItem.order_id.label("order_id"),
+                func.sum(line_value).label("order_line_value"),
+            )
+            .group_by(OrderLineItem.order_id)
+            .subquery()
+        )
+        product_key = func.coalesce(
+            OrderLineItem.product_id,
+            func.concat(
+                "unknown:",
+                func.lower(
+                    func.coalesce(func.btrim(OrderLineItem.title), "unknown")
+                ),
+            ),
+        )
+        product_by_order = (
+            select(
+                OrderLineItem.order_id.label("order_id"),
+                product_key.label("product_id"),
+                func.coalesce(func.max(OrderLineItem.title), "Unknown product").label(
+                    "product_name"
+                ),
+                func.sum(line_value).label("product_line_value"),
+                func.coalesce(func.sum(OrderLineItem.quantity), 0).label("units"),
+            )
+            .where(OrderLineItem.order_id.is_not(None))
+            .group_by(
+                OrderLineItem.order_id,
+                product_key,
+            )
+            .subquery()
+        )
+        attributed_revenue = case(
+            (
+                order_line_totals.c.order_line_value > 0,
+                func.coalesce(Order.total_price, 0)
+                * product_by_order.c.product_line_value
+                / order_line_totals.c.order_line_value,
+            ),
+            else_=0,
+        )
+        statement = (
+            select(
+                product_by_order.c.product_id.label("id"),
+                func.max(product_by_order.c.product_name).label("label"),
+                func.coalesce(func.sum(attributed_revenue), 0).label("revenue"),
+                func.count(func.distinct(Order.id)).label("orders"),
+                func.coalesce(func.sum(product_by_order.c.units), 0).label(
+                    "units_sold"
+                ),
+            )
+            .select_from(product_by_order)
+            .join(Order, Order.id == product_by_order.c.order_id)
+            .join(order_line_totals, order_line_totals.c.order_id == Order.id)
+            .where(Order.processed_at.is_not(None))
+            .group_by(product_by_order.c.product_id)
+        )
+        statement = self._apply_filters(statement, filters)
+        if product_ids is not None:
+            statement = statement.where(
+                product_by_order.c.product_id.in_(product_ids)
+            )
+        ordering = {
+            "revenue": func.sum(attributed_revenue),
+            "orders": func.count(func.distinct(Order.id)),
+            "units_sold": func.sum(product_by_order.c.units),
+        }[measure]
+        statement = statement.order_by(
+            ordering.desc(), product_by_order.c.product_id.asc()
+        )
+        return statement if product_ids is not None else statement.limit(5)
 
     def get_action_export_rows(
         self,

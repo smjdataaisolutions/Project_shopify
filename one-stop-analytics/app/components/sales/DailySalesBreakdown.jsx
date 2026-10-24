@@ -110,9 +110,7 @@ export function DailySalesBreakdown({ filters }) {
     if (type === "date") return formatDailySalesDate(record[column]);
     if (type === "number") return numberFormatter.format(record[column]);
     const formatted = currencyFormatter.format(record[column]);
-    return type === "deduction" && record[column] !== 0
-      ? `−${formatted}`
-      : formatted;
+    return type === "deduction" && record[column] !== 0 ? `−${formatted}` : formatted;
   };
 
   const viewState = getDailySalesBreakdownState({ isLoading, result, error });

@@ -1,0 +1,31 @@
+# Files excluded from the Cloud Build source archive.
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.codex
+.agents
+.aws
+Archive
+GIT
+Shopify_analytics_project_docs
+SMJ Landing Page
+one-stop-analytics
+ddl
+deploy
+docs
+env_conf
+job_conf
+scripts
+testing
+tests
+README.md
+requirements.txt
+status.txt
+*.log

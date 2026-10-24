@@ -173,8 +173,7 @@ class DailySalesBreakdownTests(unittest.TestCase):
         self.assertEqual(response.summary.orders, 4)
         self.assertIs(get_breakdown.call_args.args[0], filters)
         route = next(
-            route
-            for route in router.routes
+            route for route in router.routes
             if route.path == "/api/sales/daily-breakdown"
         )
         self.assertEqual(route.response_model, DailySalesBreakdownResponse)

@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS products (
   handle TEXT,
   status TEXT,
   vendor TEXT,
+  image_url TEXT,
   product_type TEXT,
   tags JSONB,
   created_at TIMESTAMPTZ,
@@ -93,6 +94,7 @@ HAVING MAX(updated_at) IS NOT NULL
 ON CONFLICT (source) DO NOTHING;
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_price NUMERIC;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_discount NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_shipping NUMERIC;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax NUMERIC;

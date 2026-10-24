@@ -41,14 +41,6 @@ export default defineConfig({
     cors: {
       preflightContinue: true,
     },
-    // Keep browser requests same-origin while forwarding analytics API calls
-    // to the locally running FastAPI service during development.
-    proxy: {
-      "/api": {
-        target: process.env.FASTAPI_URL || "http://127.0.0.1:8000",
-        changeOrigin: true,
-      },
-    },
     port: Number(process.env.PORT || 3000),
     hmr: hmrConfig,
     fs: {

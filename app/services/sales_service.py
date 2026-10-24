@@ -1,6 +1,6 @@
 import csv
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import io
 
@@ -24,8 +24,16 @@ from app.schemas.sales import (
     SalesChannelFilterOption,
     SalesFilterOptionsResponse,
     SalesSummary,
+    SalesChartPoint,
+    SalesChartPeriod,
+    SalesChartResponse,
+    SalesChartSummary,
 )
-from app.services.sales_channel_service import group_sales_channels
+from app.services.sales_channel_service import (
+    SALES_CHANNEL_PRESENTATION,
+    categorize_sales_channel,
+    group_sales_channels,
+)
 
 
 REFUND_CANCELLATION_ACTION_ID = "sales_refund_cancellation_spike"
@@ -38,6 +46,72 @@ CSV_COLUMNS = (
     "cancelled_at",
     "refunded_date",
 )
+
+SALES_CHART_CONFIG = {
+    "processed_date": {
+        "measures": {"revenue", "orders", "units_sold", "average_order_value"},
+        "chart_type": "line",
+    },
+    "sales_channel": {
+        "measures": {"revenue", "orders", "units_sold", "average_order_value"},
+        "chart_type": "bar",
+    },
+    "product": {
+        "measures": {"revenue", "orders", "units_sold"},
+        "chart_type": "horizontal_bar",
+    },
+}
+SALES_CHANNEL_NAMES = dict(SALES_CHANNEL_PRESENTATION)
+SALES_COMPARISONS = {
+    "none",
+    "previous_period",
+    "previous_7_days",
+    "previous_30_days",
+}
+
+
+def build_sales_comparison_period(
+    filters: SalesFilters, comparison: str
+) -> tuple[SalesChartPeriod | None, SalesChartPeriod | None, SalesFilters | None]:
+    """Build non-overlapping inclusive chart periods in one reusable place."""
+    if comparison not in SALES_COMPARISONS:
+        raise ValueError(
+            "Unsupported comparison. Choose none, previous_period, "
+            "previous_7_days, or previous_30_days."
+        )
+    has_complete_period = filters.start_date is not None and filters.end_date is not None
+    current_period = (
+        SalesChartPeriod(
+            start_date=filters.start_date,
+            end_date=filters.end_date,
+            days=(filters.end_date - filters.start_date).days + 1,
+        )
+        if has_complete_period
+        else None
+    )
+    if comparison == "none":
+        return current_period, None, None
+    if not has_complete_period:
+        raise ValueError(
+            "Select both a start date and end date before enabling comparison."
+        )
+
+    comparison_days = {
+        "previous_period": current_period.days,
+        "previous_7_days": 7,
+        "previous_30_days": 30,
+    }[comparison]
+    comparison_end = filters.start_date - timedelta(days=1)
+    comparison_start = comparison_end - timedelta(days=comparison_days - 1)
+    comparison_period = SalesChartPeriod(
+        start_date=comparison_start,
+        end_date=comparison_end,
+        days=comparison_days,
+    )
+    comparison_filters = replace(
+        filters, start_date=comparison_start, end_date=comparison_end
+    )
+    return current_period, comparison_period, comparison_filters
 
 
 @dataclass(frozen=True)
@@ -143,10 +217,7 @@ class SalesService:
 
         return DailySalesBreakdownResponse(
             currency=result.currency_code,
-            items=[
-                DailySalesBreakdownItem(date=row.date, **values(row))
-                for row in result.rows
-            ],
+            items=[DailySalesBreakdownItem(date=row.date, **values(row)) for row in result.rows],
             summary=DailySalesBreakdownValues(**values(result)),
             pagination=DailySalesBreakdownPagination(
                 page=page,
@@ -195,6 +266,186 @@ class SalesService:
             data=points,
             highlights=highlights,
         )
+
+    def get_sales_chart(
+        self,
+        filters: SalesFilters,
+        dimension: str,
+        measure: str,
+        comparison: str = "none",
+    ) -> SalesChartResponse:
+        config = SALES_CHART_CONFIG.get(dimension)
+        if not config:
+            raise ValueError(
+                "Unsupported dimension. Choose processed_date, sales_channel, or product."
+            )
+        if measure not in config["measures"]:
+            raise ValueError(f"{measure} is not supported for {dimension}.")
+
+        current_period, comparison_period, comparison_filters = (
+            build_sales_comparison_period(filters, comparison)
+        )
+
+        result = self.repository.get_sales_chart(filters, dimension, measure)
+        product_ids = (
+            tuple(str(row.id) for row in result.rows)
+            if dimension == "product"
+            else None
+        )
+        comparison_result = (
+            self.repository.get_sales_chart(
+                comparison_filters, dimension, measure, product_ids
+            )
+            if comparison_filters is not None
+            else None
+        )
+
+        current_data = self._sales_chart_points(
+            result, dimension, measure, current_period
+        )
+        comparison_data = (
+            self._sales_chart_points(
+                comparison_result, dimension, measure, comparison_period
+            )
+            if comparison_result is not None and comparison_result.rows
+            else []
+        )
+        current_value = self._sales_chart_total(result, measure)
+        comparison_value = (
+            self._sales_chart_total(comparison_result, measure)
+            if comparison_result is not None
+            else None
+        )
+        status = "disabled"
+        absolute_change = None
+        percentage_change = None
+        if comparison_result is not None:
+            absolute_change = current_value - comparison_value
+            if not comparison_result.rows:
+                status = "no_data"
+            elif comparison_value == 0 and current_value > 0:
+                status = "no_baseline"
+            else:
+                status = "available"
+                percentage_change = (
+                    Decimal("0")
+                    if comparison_value == 0
+                    else absolute_change / comparison_value * Decimal("100")
+                )
+
+        return SalesChartResponse(
+            dimension=dimension,
+            measure=measure,
+            chart_type=config["chart_type"],
+            currency=result.currency_code or (
+                comparison_result.currency_code if comparison_result else None
+            ),
+            comparison=comparison,
+            current_period=current_period,
+            comparison_period=comparison_period,
+            summary=SalesChartSummary(
+                current_value=float(current_value),
+                comparison_value=(
+                    float(comparison_value) if comparison_value is not None else None
+                ),
+                absolute_change=(
+                    float(absolute_change) if absolute_change is not None else None
+                ),
+                percentage_change=(
+                    float(percentage_change)
+                    if percentage_change is not None
+                    else None
+                ),
+                comparison_status=status,
+            ),
+            has_current_data=bool(result.rows),
+            has_comparison_data=bool(
+                comparison_result is not None and comparison_result.rows
+            ),
+            data=current_data,
+            comparison_data=comparison_data,
+        )
+
+    @staticmethod
+    def _sales_chart_total(result, measure: str) -> Decimal:
+        if measure == "revenue":
+            return result.total_revenue
+        if measure == "orders":
+            return Decimal(result.total_orders)
+        if measure == "units_sold":
+            return Decimal(result.total_units_sold)
+        return (
+            result.total_revenue / result.total_orders
+            if result.total_orders
+            else Decimal("0")
+        )
+
+    def _sales_chart_points(
+        self, result, dimension: str, measure: str, period: SalesChartPeriod | None
+    ) -> list[SalesChartPoint]:
+        aggregates = result.rows
+        if dimension == "sales_channel":
+            grouped = {}
+            for row in aggregates:
+                category = categorize_sales_channel(str(row.id))
+                current = grouped.setdefault(
+                    category,
+                    {
+                        "id": category,
+                        "label": SALES_CHANNEL_NAMES[category],
+                        "revenue": Decimal("0"),
+                        "orders": 0,
+                        "units_sold": 0,
+                    },
+                )
+                current["revenue"] += row.revenue
+                current["orders"] += row.orders
+                current["units_sold"] += row.units_sold
+            aggregates = list(grouped.values())
+
+        def value(row):
+            revenue = row["revenue"] if isinstance(row, dict) else row.revenue
+            orders = row["orders"] if isinstance(row, dict) else row.orders
+            units = row["units_sold"] if isinstance(row, dict) else row.units_sold
+            if measure == "revenue":
+                return revenue
+            if measure == "orders":
+                return orders
+            if measure == "units_sold":
+                return units
+            return revenue / orders if orders else Decimal("0")
+
+        aggregates = sorted(
+            aggregates,
+            key=(
+                (lambda row: str(row["label"] if isinstance(row, dict) else row.label))
+                if dimension == "processed_date"
+                else (lambda row: value(row))
+            ),
+            reverse=dimension != "processed_date",
+        )
+        points = [
+            SalesChartPoint(
+                id=str(row["id"] if isinstance(row, dict) else row.id),
+                label=str(row["label"] if isinstance(row, dict) else row.label),
+                value=float(value(row)),
+            )
+            for row in aggregates
+        ]
+        if dimension == "processed_date" and period is not None:
+            points_by_date = {point.id: point for point in points}
+            return [
+                points_by_date.get(
+                    str(period.start_date + timedelta(days=offset)),
+                    SalesChartPoint(
+                        id=str(period.start_date + timedelta(days=offset)),
+                        label=str(period.start_date + timedelta(days=offset)),
+                        value=0,
+                    ),
+                )
+                for offset in range(period.days)
+            ]
+        return points
 
     def get_action_needed(
         self,

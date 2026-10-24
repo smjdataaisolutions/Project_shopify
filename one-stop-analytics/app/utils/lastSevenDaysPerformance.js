@@ -16,19 +16,26 @@ export function formatFullDate(value) {
 }
 
 export function currencyFormatter(currencyCode = "USD") {
+  const normalizedCurrencyCode = typeof currencyCode === "string"
+    ? currencyCode.trim().toUpperCase()
+    : "";
+  const safeCurrencyCode = /^[A-Z]{3}$/.test(normalizedCurrencyCode)
+    ? normalizedCurrencyCode
+    : "USD";
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: currencyCode,
+    currency: safeCurrencyCode,
   });
 }
 
 export function comparisonPresentation(comparison) {
   if (comparison.status === "new_activity") {
-    return { symbol: "â†‘", text: "New sales activity", tone: "info" };
+    return { symbol: "↑", text: "New sales activity", tone: "info" };
   }
   if (comparison.status === "no_change") {
     return {
-      symbol: "â†’",
+      symbol: "→",
       text: comparison.current_total_sales === 0
         ? "No sales in either period"
         : "No change vs previous 7 days",
@@ -38,13 +45,13 @@ export function comparisonPresentation(comparison) {
   const percentage = Math.abs(comparison.percentage_change || 0).toFixed(1);
   if (comparison.status === "decline") {
     return {
-      symbol: "â†“",
+      symbol: "↓",
       text: `${percentage}% vs previous 7 days`,
       tone: "critical",
     };
   }
   return {
-    symbol: "â†‘",
+    symbol: "↑",
     text: `${percentage}% vs previous 7 days`,
     tone: "success",
   };

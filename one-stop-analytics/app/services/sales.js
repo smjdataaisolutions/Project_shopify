@@ -5,6 +5,7 @@ const REVENUE_TREND_ENDPOINT = "/api/sales/revenue/trend";
 const SALES_ACTION_NEEDED_ENDPOINT = "/api/sales/action-needed";
 const SALES_FILTER_OPTIONS_ENDPOINT = "/api/sales/filter-options";
 const DAILY_SALES_BREAKDOWN_ENDPOINT = "/api/sales/daily-breakdown";
+const SALES_CHART_ENDPOINT = "/api/sales/chart";
 
 function withSalesFilters(endpoint, filters = {}, extraParameters = {}) {
   const parameters = new URLSearchParams(extraParameters);
@@ -88,6 +89,28 @@ export async function fetchRevenueTrend(filters) {
     throw new Error(`Revenue trend request failed (${response.status}).`);
   }
 
+  return response.json();
+}
+
+export async function fetchSalesChart({ filters, dimension, measure, comparison = "none" }) {
+  const response = await fetch(
+    withSalesFilters(SALES_CHART_ENDPOINT, filters, {
+      dimension,
+      measure,
+      comparison,
+    }),
+    { headers: { Accept: "application/json" } },
+  );
+  if (!response.ok) {
+    let detail = `Sales Explorer request failed (${response.status}).`;
+    try {
+      const body = await response.json();
+      if (body.detail) detail = body.detail;
+    } catch {
+      // Keep the status-based message when the response is not JSON.
+    }
+    throw new Error(detail);
+  }
   return response.json();
 }
 
