@@ -53,8 +53,23 @@ counts remained 23/32/2/39/13/19/1. Composite product and order relationships va
 the inventory/location constraint remained expectedly unvalidated. Six PostgreSQL tests
 proved isolation using synthetic Fashion and Beauty tenants with reused Shopify IDs.
 
-The local source copy predates two live orders and line items. A Neon branch rehearsal
-and live count/KPI comparison remain mandatory before production approval.
+On 26 October 2026, the migration also passed on disposable Neon branch
+`mt001-rehearsal-2026-10-26`, database `neondb`, using snapshot
+`pre-mt001-2026-10-26 04:21:11 UTC (manual)` as the recovery reference. The recorded
+migration checksum is
+`4594d8b05343cef03e6ce5cedfc79788aecfb61dd11a7af187089067be48225a`.
+
+The live-copy counts remained 23/32/2/39/15/21/1, all rows were assigned to
+`test-store-martina.myshopify.com`, and no null tenant ownership, orphan variants, or
+orphan line-item orders were found. Eleven tenant constraints and seven tenant-first
+indexes were present. Reapplying the migration returned `already_applied=true`.
+Fifteen read-only PostgreSQL regression tests passed across Overview, Sales, Inventory,
+Orders, and Products.
+
+The two preserved inventory rows belong to deleted location `Snow City Warehouse` and
+cannot be safely reassigned to an active location. They remain accepted historical rows;
+the inventory/location constraint is `NOT VALID` for those rows and enforced for new
+writes.
 
 ## Rollback
 
