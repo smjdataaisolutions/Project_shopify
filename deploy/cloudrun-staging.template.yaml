@@ -37,7 +37,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: smj-shopify-tenant-assertion-secret
-                  key: "1"
+                  key: "2"
             - name: APP_NAME
               value: SMJ Shopify Analytics API - Staging
             - name: DEPLOYMENT_ENVIRONMENT

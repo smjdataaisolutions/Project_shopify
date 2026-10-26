@@ -37,7 +37,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: smj-shopify-tenant-assertion-secret
-                  key: "1"
+                  key: "2"
             - name: SHOPIFY_API_KEY
               value: "38254bd587274d5002c06d0ecab16259"
             - name: SHOPIFY_APP_URL
