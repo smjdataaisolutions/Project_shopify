@@ -104,18 +104,25 @@ storage charges; remove obsolete images only under a separate cleanup approval.
 
 ## Remaining release gates
 
-1. Verify a recoverable Neon backup.
-2. Rehearse against a Neon branch using the current live 23/32/2/39/15/21/1 baseline.
-3. Create and permission the assertion secret.
-4. Obtain explicit approval for live migration and deployment.
-5. Verify the development store, then a second authorized test store.
-6. Complete Milestone 3 before promising automatic initial sync to beta merchants.
+1. Obtain explicit approval for live migration and deployment.
+2. Verify the development store, then a second authorized test store.
+3. Complete Milestone 3 before promising automatic initial sync to beta merchants.
 
-Known issue: two preserved inventory rows reference deleted locations. The FK is
-enforced for new rows but remains `NOT VALID` until those historical records are resolved.
+Completed on 26 October 2026: manual Neon snapshot
+`pre-mt001-2026-10-26 04:21:11 UTC (manual)` and disposable branch rehearsal on
+`mt001-rehearsal-2026-10-26` (`neondb`). Counts remained 23/32/2/39/15/21/1 and 15
+read-only database regression tests passed across all five modules.
 
-Repository layout: the deployed application code and MT-001 changes have been
-consolidated into `D:\SMJ AI Automation Solutions\Project_shopify` on the
-`feature/mt-001-multi-tenant` branch. The older `GIT` checkout and standalone source
-folders are retained only as local backups and are no longer the authoritative Git
-worktree.
+Completed on 26 October 2026: Secret Manager secret
+`smj-shopify-tenant-assertion-secret` with enabled version 1. The only secret-level IAM
+members are the frontend and backend runtime service accounts, each with
+`roles/secretmanager.secretAccessor`. No service was deployed during this step.
+
+Known accepted issue: two preserved inventory rows reference deleted location
+`Snow City Warehouse`. They cannot be safely mapped to either active location. The FK is
+enforced for new rows but remains `NOT VALID` for those historical records.
+
+Repository layout: the deployed application code and MT-001 changes are consolidated
+in `D:\SMJ AI Automation Solutions\Project_shopify` on the
+`feature/mt-001-multi-tenant` branch. The obsolete `GIT` checkout was removed and the
+former standalone sources were moved to the dated `Archive` backup.

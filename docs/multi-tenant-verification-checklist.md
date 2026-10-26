@@ -16,12 +16,12 @@
 
 ## Required before live migration/deployment
 
-- [ ] Verify and record a recoverable Neon backup.
-- [ ] Rehearse on a disposable Neon branch.
-- [ ] Compare the expected live baseline: 23/32/2/39/15/21/1.
-- [ ] Compare representative KPIs for all five modules.
-- [ ] Resolve or explicitly accept two historical inventory/location orphans.
-- [ ] Create and permission the tenant-assertion secret.
+- [x] Record snapshot `pre-mt001-2026-10-26 04:21:11 UTC (manual)`.
+- [x] Rehearse on disposable branch `mt001-rehearsal-2026-10-26`.
+- [x] Preserve the expected live baseline: 23/32/2/39/15/21/1.
+- [x] Pass 15 read-only regression tests across all five analytics modules.
+- [x] Accept two historical rows for deleted location `Snow City Warehouse`; do not remap them.
+- [x] Create tenant-assertion secret version 1 and grant accessor only to both runtime service accounts.
 - [ ] Obtain approval for live migration, IAM, and both deployments.
 - [ ] Verify FastAPI remains IAM-private with no `allUsers` binding.
 - [ ] Test the development store, then a separate authorized test store.

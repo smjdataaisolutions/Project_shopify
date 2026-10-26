@@ -11,7 +11,7 @@ param(
     [string]$ShopifyApiSecret = "smj-shopify-app-api-secret",
     [string]$ShopifyApiSecretVersion = "5",
     [string]$SessionDatabaseSecret = "smj-shopify-session-database-url",
-    [string]$SessionDatabaseSecretVersion = "4",
+    [string]$SessionDatabaseSecretVersion = "2",
     [string]$TenantAssertionSecret = "smj-shopify-tenant-assertion-secret",
     [string]$TenantAssertionSecretVersion = "1",
     [string]$ShopifyApiKey = "38254bd587274d5002c06d0ecab16259",
