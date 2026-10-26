@@ -10,7 +10,7 @@ param(
     [string]$ShopifyApiSecret = "smj-shopify-app-api-secret",
     [string]$ShopifyApiSecretVersion = "5",
     [string]$TenantAssertionSecret = "smj-shopify-tenant-assertion-secret",
-    [string]$TenantAssertionSecretVersion = "1",
+    [string]$TenantAssertionSecretVersion = "2",
     [string]$ShopifyApiKey = "38254bd587274d5002c06d0ecab16259",
     [string]$Invoker = "smjdataaisolutions@gmail.com",
     [Parameter(Mandatory = $true)]
@@ -50,7 +50,7 @@ Write-Host "Runtime identity: $RuntimeServiceAccount"
 Write-Host "Secret reference: ${DatabaseSecret}:${DatabaseSecretVersion}"
 Write-Host "Shopify secret reference: ${ShopifyApiSecret}:${ShopifyApiSecretVersion}"
 Write-Host "Tenant assertion secret reference: ${TenantAssertionSecret}:${TenantAssertionSecretVersion}"
-Write-Host "Public access: disabled"
+Write-Host "IAM policy: preserved (backend must already be private)"
 Write-Host "Scaling: 0 to 1 instance"
 
 if (-not $Execute) {
@@ -124,7 +124,6 @@ if ($Build) {
     --no-cpu-boost `
     --execution-environment=gen2 `
     --ingress=all `
-    --no-allow-unauthenticated `
     --quiet
 if ($LASTEXITCODE -ne 0) { throw "Cloud Run deployment failed." }
 

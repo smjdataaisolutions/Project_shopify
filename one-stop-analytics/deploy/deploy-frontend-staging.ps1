@@ -13,7 +13,7 @@ param(
     [string]$SessionDatabaseSecret = "smj-shopify-session-database-url",
     [string]$SessionDatabaseSecretVersion = "2",
     [string]$TenantAssertionSecret = "smj-shopify-tenant-assertion-secret",
-    [string]$TenantAssertionSecretVersion = "1",
+    [string]$TenantAssertionSecretVersion = "2",
     [string]$ShopifyApiKey = "38254bd587274d5002c06d0ecab16259",
     [Parameter(Mandatory = $true)]
     [ValidatePattern("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")]
@@ -120,7 +120,6 @@ try {
         --no-cpu-boost `
         --execution-environment=gen2 `
         --ingress=all `
-        --no-allow-unauthenticated `
         --quiet
     if ($LASTEXITCODE -ne 0) { throw "Cloud Run deployment failed." }
 }

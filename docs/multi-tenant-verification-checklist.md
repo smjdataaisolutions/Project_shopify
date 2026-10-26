@@ -21,8 +21,10 @@
 - [x] Preserve the expected live baseline: 23/32/2/39/15/21/1.
 - [x] Pass 15 read-only regression tests across all five analytics modules.
 - [x] Accept two historical rows for deleted location `Snow City Warehouse`; do not remap them.
-- [x] Create tenant-assertion secret version 1 and grant accessor only to both runtime service accounts.
-- [ ] Obtain approval for live migration, IAM, and both deployments.
-- [ ] Verify FastAPI remains IAM-private with no `allUsers` binding.
-- [ ] Test the development store, then a separate authorized test store.
-- [ ] Observe authorization, tenant-scope and database logs before beta onboarding.
+- [x] Create tenant-assertion secret and grant accessor only to both runtime service accounts.
+- [x] Replace newline-affected version 1 with normalized version 2 on both services.
+- [x] Apply the approved production migration and deploy both MT-001 images.
+- [x] Verify FastAPI remains IAM-private with no `allUsers` binding.
+- [x] Test the authenticated development store across the deployed tenant bridge.
+- [ ] Test a separate authorized development store for live cross-store isolation.
+- [ ] Continue observing authorization, tenant-scope and database logs before beta onboarding.

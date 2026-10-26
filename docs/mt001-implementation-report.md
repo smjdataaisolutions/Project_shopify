@@ -1,6 +1,6 @@
 # MT-001 local implementation report
 
-Status: locally implemented and tested; not migrated or deployed.
+Status: implemented, production-migrated and deployed to staging on 26 October 2026.
 
 ## Delivered
 
@@ -32,14 +32,14 @@ its indexed `shop` field. Access tokens remain only in that separate session dat
 Expected test logs include deliberately raised SQLAlchemy errors from error-mapping unit
 tests and one simulated webhook-forwarding 500. They do not indicate suite failures.
 
-## New cloud prerequisite (do not execute without approval)
+## Cloud secret configuration
 
 Both existing runtime identities need Secret Manager accessor on one dedicated secret:
 
 - `smj-shopify-frontend-runner@smj-shopify-analytics.iam.gserviceaccount.com`
 - `smj-shopify-api-runner@smj-shopify-analytics.iam.gserviceaccount.com`
 
-PowerShell preparation commands:
+Reference PowerShell preparation commands (do not rerun without approval):
 
 ```powershell
 $gcloud = 'C:\Users\Shem Dennis\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd'
@@ -55,11 +55,23 @@ $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
 $rng.GetBytes($randomBytes)
 $rng.Dispose()
 $secretValue = [Convert]::ToBase64String($randomBytes)
-$secretValue | & $gcloud secrets versions add $secretName `
-  --project $project `
-  --data-file=-
-$secretValue = $null
-$randomBytes = $null
+$secretFile = Join-Path ([IO.Path]::GetTempPath()) `
+  ("smj-tenant-secret-{0}.txt" -f [guid]::NewGuid().ToString('N'))
+try {
+  [IO.File]::WriteAllText(
+    $secretFile,
+    $secretValue,
+    [Text.UTF8Encoding]::new($false)
+  )
+  & $gcloud secrets versions add $secretName `
+    --project $project `
+    --data-file=$secretFile
+}
+finally {
+  Remove-Item -LiteralPath $secretFile -Force -ErrorAction SilentlyContinue
+  $secretValue = $null
+  $randomBytes = $null
+}
 
 & $gcloud secrets add-iam-policy-binding $secretName `
   --project $project `
@@ -72,23 +84,25 @@ $randomBytes = $null
   --role 'roles/secretmanager.secretAccessor'
 ```
 
-These commands create/modify cloud resources and IAM and were not run.
+These commands create/modify cloud resources and IAM. The staging prerequisite was
+completed under explicit approval; this example is retained for controlled recovery or
+future environment setup.
 
-## Prepared deployment commands (do not execute yet)
+## Deployment commands
 
-After backup, Neon-branch rehearsal, live migration approval, secret creation, image
-build approval and coordinated downtime approval:
+Use these only after explicit deployment approval. Omitting the IAM grant switches
+preserves the existing Cloud Run IAM policies:
 
 ```powershell
 & 'C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe' `
   -NoProfile -ExecutionPolicy Bypass `
   -File '.\deploy\deploy-staging.ps1' `
-  -ImageTag '<BACKEND_IMAGE_TAG>' -Build -Execute -Confirm
+  -ImageTag '<BACKEND_IMAGE_TAG>' -Execute -Confirm
 
 & 'C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe' `
   -NoProfile -ExecutionPolicy Bypass `
   -File '.\one-stop-analytics\deploy\deploy-frontend-staging.ps1' `
-  -ImageTag '<FRONTEND_IMAGE_TAG>' -Build -Execute -Confirm
+  -ImageTag '<FRONTEND_IMAGE_TAG>' -Execute -Confirm
 ```
 
 Do not use `-GrantInvoker` or `-GrantBackendInvoker` unless an IAM check shows the
@@ -104,8 +118,8 @@ storage charges; remove obsolete images only under a separate cleanup approval.
 
 ## Remaining release gates
 
-1. Obtain explicit approval for live migration and deployment.
-2. Verify the development store, then a second authorized test store.
+1. Verify a second authorized development store against the deployed services.
+2. Continue monitoring tenant authorization and synchronization logs before beta onboarding.
 3. Complete Milestone 3 before promising automatic initial sync to beta merchants.
 
 Completed on 26 October 2026: manual Neon snapshot
@@ -114,15 +128,24 @@ Completed on 26 October 2026: manual Neon snapshot
 read-only database regression tests passed across all five modules.
 
 Completed on 26 October 2026: Secret Manager secret
-`smj-shopify-tenant-assertion-secret` with enabled version 1. The only secret-level IAM
-members are the frontend and backend runtime service accounts, each with
-`roles/secretmanager.secretAccessor`. No service was deployed during this step.
+`smj-shopify-tenant-assertion-secret`. Version 1 was found to contain a trailing newline;
+normalized version 2 is now active on both services. Version 1 remains enabled
+temporarily but must not be selected. The only secret-level IAM members are the frontend
+and backend runtime service accounts, each with `roles/secretmanager.secretAccessor`.
+
+Completed on 26 October 2026: migration `001_multi_tenant` applied to production
+database `neondb` using snapshot `pre-mt001-2026-10-26 04:21:11 UTC (manual)` as the
+recovery reference. Backend revision `smj-shopify-api-00007-rz2` and frontend revision
+`smj-shopify-frontend-00010-cvr` serve 100% traffic with image tag
+`mt001-20261026-02`. Both services remain request-based at minimum 0 and maximum 1.
+Backend IAM remains private and both IAM policies were unchanged. The authenticated
+development-store bridge and tenant-scoped analytics request returned HTTP 200.
 
 Known accepted issue: two preserved inventory rows reference deleted location
 `Snow City Warehouse`. They cannot be safely mapped to either active location. The FK is
 enforced for new rows but remains `NOT VALID` for those historical records.
 
 Repository layout: the deployed application code and MT-001 changes are consolidated
-in `D:\SMJ AI Automation Solutions\Project_shopify` on the
-`feature/mt-001-multi-tenant` branch. The obsolete `GIT` checkout was removed and the
+in `D:\SMJ AI Automation Solutions\Project_shopify` on the `main` branch. The obsolete
+`GIT` checkout was removed and the
 former standalone sources were moved to the dated `Archive` backup.
