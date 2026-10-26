@@ -8,8 +8,15 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npx prisma generate --schema prisma/postgres/schema.prisma
 RUN npm run build
-RUN npm prune --omit=dev && npm cache clean --force
-RUN npx prisma generate --schema prisma/postgres/schema.prisma
+RUN npm prune --omit=dev \
+    && rm -rf /app/node_modules/prisma \
+              /app/node_modules/@prisma/config \
+              /app/node_modules/deepmerge-ts \
+    && npm cache clean --force
+RUN test ! -d /app/node_modules/prisma \
+    && test ! -d /app/node_modules/@prisma/config \
+    && test ! -d /app/node_modules/deepmerge-ts \
+    && node --input-type=module -e "await import('@prisma/client'); await import('@shopify/shopify-app-session-storage-prisma')"
 
 FROM node:22-alpine AS runtime
 
