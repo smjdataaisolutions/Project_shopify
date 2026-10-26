@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.session import get_db
+from app.db.tenant_session import get_tenant_db
 from app.repositories.dashboard_repository import DashboardRepository, OverviewFilters
 from app.schemas.dashboard import (
     ActionNeededResponse,
@@ -81,7 +81,7 @@ def _action_needed_service(db: Session) -> ActionNeededService:
 @router.get("/dashboard", response_model=DashboardSummary)
 def get_dashboard(
     filters: OverviewFilters = Depends(get_overview_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> DashboardSummary:
     """Return Store Overview KPI values for the selected filters."""
     try:
@@ -110,7 +110,7 @@ def get_daily_store_performance(
     ] = Query(default="date"),
     sort_order: Literal["asc", "desc"] = Query(default="desc"),
     filters: OverviewFilters = Depends(get_overview_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> DailyStorePerformanceResponse:
     """Return filtered daily store performance with complete-result totals."""
     try:
@@ -135,7 +135,7 @@ def get_daily_store_performance(
 )
 def get_last_seven_days_performance(
     filters: OverviewFilters = Depends(get_overview_non_date_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> LastSevenDaysPerformanceResponse:
     """Return fixed rolling seven-day charts using supported non-date filters."""
     try:
@@ -153,7 +153,7 @@ def get_last_seven_days_performance(
     response_model=OverviewFilterOptionsResponse,
 )
 def get_overview_filter_options(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> OverviewFilterOptionsResponse:
     """Return exact filter values available in synchronized PostgreSQL data."""
     try:
@@ -172,7 +172,7 @@ def get_overview_filter_options(
 )
 def get_business_highlights(
     filters: OverviewFilters = Depends(get_overview_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> BusinessHighlightsResponse:
     """Return rule-based highlights for the selected filters."""
     try:
@@ -191,7 +191,7 @@ def get_business_highlights(
 )
 def get_action_needed(
     filters: OverviewFilters = Depends(get_overview_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> ActionNeededResponse:
     """Return prioritized actions for the selected filters."""
     try:
@@ -208,7 +208,7 @@ def get_action_needed(
 def download_action_needed_records(
     action_id: str,
     filters: OverviewFilters = Depends(get_overview_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> Response:
     """Download only the records contributing to one overview action."""
     try:

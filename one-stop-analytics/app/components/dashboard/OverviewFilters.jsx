@@ -16,7 +16,7 @@ function FilterOption({ label, selected, onClick }) {
         <span className={styles.optionLabel}>{label}</span>
       </span>
       <span className={styles.check} aria-hidden="true">
-        {selected ? "âœ“" : ""}
+        {selected ? "✓" : ""}
       </span>
     </button>
   );
@@ -182,7 +182,7 @@ export function OverviewFilters({
           {!options && !error ? (
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-spinner accessibilityLabel="Loading filter options" />
-              <s-text>Loading filtersâ€¦</s-text>
+              <s-text>Loading filters…</s-text>
             </s-stack>
           ) : null}
 

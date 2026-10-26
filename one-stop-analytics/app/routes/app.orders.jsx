@@ -12,6 +12,7 @@ import { OrderPerformanceInsights } from "../components/orders/OrderPerformanceI
 import styles from "../components/dashboard/dashboard.module.css";
 import { fetchOrderKpis } from "../services/orders";
 import { authenticate } from "../shopify.server";
+import { formatOverviewUpdatedAt } from "../utils/overviewNavigation";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -119,6 +120,7 @@ export default function Orders() {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [requestVersion, setRequestVersion] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -128,7 +130,10 @@ export default function Orders() {
 
     fetchOrderKpis(filters)
       .then((response) => {
-        if (active) setKpis(response);
+        if (active) {
+          setKpis(response);
+          setLastUpdatedAt(new Date());
+        }
       })
       .catch((requestError) => {
         if (active) {
@@ -146,7 +151,19 @@ export default function Orders() {
 
   return (
     <s-page heading="Orders" inlineSize="large">
-      <AnalyticsTopNavigation />
+      <AnalyticsTopNavigation>
+        <s-text tone="subdued">
+          Last updated: {formatOverviewUpdatedAt(lastUpdatedAt)}
+        </s-text>
+        <s-button
+          icon="refresh"
+          onClick={() => setRequestVersion((version) => version + 1)}
+          disabled={isLoading}
+          accessibilityLabel="Refresh Orders analytics"
+        >
+          Refresh
+        </s-button>
+      </AnalyticsTopNavigation>
 
       {hasOrderFilters(filters) ? (
         <div className={styles.appliedSalesFilters}>

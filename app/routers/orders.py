@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.tenant_session import get_tenant_db
 from app.repositories.orders_repository import OrderFilters, OrdersRepository
 from app.schemas.orders import (
     OrderChartsResponse,
@@ -45,7 +45,7 @@ def get_order_filters(
 @router.get("/kpis", response_model=OrderKpiResponse)
 def get_order_kpis(
     filters: OrderFilters = Depends(get_order_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> OrderKpiResponse:
     """Return the eight filtered Orders KPI values from PostgreSQL."""
     try:
@@ -60,7 +60,7 @@ def get_order_kpis(
 @router.get("/charts", response_model=OrderChartsResponse)
 def get_order_charts(
     filters: OrderFilters = Depends(get_order_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> OrderChartsResponse:
     """Return the four filtered ORD-002 chart datasets from PostgreSQL."""
     try:
@@ -86,7 +86,7 @@ def get_order_performance_insights(
     ] = Query(default="order_date"),
     sort_direction: Literal["asc", "desc"] = Query(default="desc"),
     filters: OrderFilters = Depends(get_order_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> OrderPerformanceResponse:
     """Return one paginated fulfillment detail per order."""
     try:
@@ -109,7 +109,7 @@ def get_order_performance_insights(
 @router.get("/{order_id:path}/timeline", response_model=OrderTimelineResponse)
 def get_order_timeline(
     order_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> OrderTimelineResponse:
     """Return reliable stored events for one order in the configured shop."""
     try:

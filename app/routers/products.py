@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.tenant_session import get_tenant_db
 from app.repositories.products_repository import ProductFilters, ProductsRepository
 from app.schemas.products import (
     ProductKpiResponse,
@@ -39,7 +39,7 @@ def get_product_filters(
 def get_product_kpis(
     response: Response,
     filters: ProductFilters = Depends(get_product_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> ProductKpiResponse:
     """Return current-catalog and all-time product-sales KPIs."""
     try:
@@ -61,7 +61,7 @@ def get_product_kpis(
 def get_product_sales_performance(
     response: Response,
     filters: ProductFilters = Depends(get_product_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> ProductSalesPerformanceResponse:
     """Return the top and low positive-unit product sales rankings."""
     try:
@@ -93,7 +93,7 @@ def get_product_performance(
     ] = Query(default="units_sold"),
     sort_direction: Literal["asc", "desc"] = Query(default="desc"),
     filters: ProductFilters = Depends(get_product_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> ProductPerformanceResponse:
     """Return filtered product master, sales, and current inventory performance."""
     try:

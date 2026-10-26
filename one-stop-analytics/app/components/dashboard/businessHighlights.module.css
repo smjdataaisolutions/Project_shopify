@@ -1,18 +1,31 @@
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.cardContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 15rem;
 }
 
 .cardHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-.state {
+.action {
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.state,
+.loadingCard {
   min-height: 8rem;
   display: flex;
   align-items: center;
@@ -21,8 +34,18 @@
   text-align: center;
 }
 
-@media (max-width: 640px) {
+.loadingCard {
+  flex-direction: column;
+  border: 1px solid var(--p-color-border, #d1d1d1);
+  border-radius: 0.5rem;
+}
+
+@media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .cardContent {
+    min-height: auto;
   }
 }

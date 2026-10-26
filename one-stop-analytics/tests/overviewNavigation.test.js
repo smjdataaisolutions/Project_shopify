@@ -43,7 +43,7 @@ test("validates Inventory level and status query state", () => {
 });
 
 test("formats successful refresh time and handles the initial state", () => {
-  assert.equal(formatOverviewUpdatedAt(null), "â€”");
+  assert.equal(formatOverviewUpdatedAt(null), "—");
   const formatted = formatOverviewUpdatedAt(new Date("2026-08-13T06:05:00Z"));
   assert.match(formatted, /Aug 13, 2026/);
   assert.match(formatted, /AM|PM/);

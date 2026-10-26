@@ -17,7 +17,10 @@ function initialDraft(appliedRange, appliedPreset) {
   if (parseIsoDate(appliedRange.startDate) && parseIsoDate(appliedRange.endDate)) {
     return { range: appliedRange, preset: appliedPreset || "custom" };
   }
-  return { range: { startDate: "", endDate: "" }, preset: null };
+  return {
+    range: { startDate: "", endDate: "" },
+    preset: null,
+  };
 }
 
 function initialView(range) {
@@ -67,11 +70,14 @@ export function DateRangePicker({ appliedRange, appliedPreset, onApply }) {
   const updateDateField = (field, value) => {
     const range = { ...draftRange, [field]: value };
     updateDraftRange(range);
-    if (parseIsoDate(value)) setViewMonth(initialView(range));
+    if (parseIsoDate(value)) {
+      setViewMonth(initialView(range));
+    }
   };
 
   const apply = () => {
-    if (!isInvalid) onApply({ range: draftRange, preset: draftPreset });
+    if (isInvalid) return;
+    onApply({ range: draftRange, preset: draftPreset });
   };
 
   const yesterday = getPresetRange("yesterday");
@@ -106,7 +112,9 @@ export function DateRangePicker({ appliedRange, appliedPreset, onApply }) {
       >
         <div className={styles.popoverContent}>
           <div className={styles.presetColumn}>
-            <s-text><strong>Presets</strong></s-text>
+            <s-text>
+              <strong>Presets</strong>
+            </s-text>
             <div className={styles.presetList}>
               {DATE_PRESETS.map((preset) => (
                 <button
@@ -134,7 +142,9 @@ export function DateRangePicker({ appliedRange, appliedPreset, onApply }) {
                   updateDateField("startDate", event.currentTarget.value)
                 }
               />
-              <span className={styles.dateArrow} aria-hidden="true">→</span>
+              <span className={styles.dateArrow} aria-hidden="true">
+                →
+              </span>
               <s-date-field
                 label="End date"
                 value={draftRange.endDate}
@@ -151,7 +161,9 @@ export function DateRangePicker({ appliedRange, appliedPreset, onApply }) {
                 value={pickerValue(draftRange)}
                 view={viewMonth}
                 allow={allowedThroughToday}
-                onViewChange={(event) => setViewMonth(event.currentTarget.view)}
+                onViewChange={(event) =>
+                  setViewMonth(event.currentTarget.view)
+                }
                 onChange={(event) =>
                   updateDraftRange(parsePickerValue(event.currentTarget.value))
                 }
@@ -166,7 +178,9 @@ export function DateRangePicker({ appliedRange, appliedPreset, onApply }) {
                     setViewMonth(shiftMonth(event.currentTarget.view, -1))
                   }
                   onChange={(event) =>
-                    updateDraftRange(parsePickerValue(event.currentTarget.value))
+                    updateDraftRange(
+                      parsePickerValue(event.currentTarget.value),
+                    )
                   }
                 />
               </div>

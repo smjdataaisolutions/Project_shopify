@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import { fetchProductSalesPerformance } from "../../services/products";
-import styles from "./ProductSalesPerformanceCharts.module.css";
+import styles from "./productSalesPerformanceCharts.module.css";
 
 const WIDTH = 640;
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });

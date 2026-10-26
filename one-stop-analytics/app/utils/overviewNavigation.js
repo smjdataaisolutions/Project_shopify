@@ -35,7 +35,7 @@ export function getInventoryNavigationState(searchParams) {
 }
 
 export function formatOverviewUpdatedAt(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",

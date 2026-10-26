@@ -271,7 +271,7 @@ export function DailyStorePerformanceTable({ filters }) {
       </div>
       <div className={styles.paginationSummary}>
         <s-text tone="subdued">
-          Page {pagination.page} of {pagination.total_pages} Â·{" "}
+          Page {pagination.page} of {pagination.total_pages} ·{" "}
           {countFormatter.format(pagination.total_items)} daily records
         </s-text>
       </div>

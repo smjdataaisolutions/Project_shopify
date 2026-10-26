@@ -1,0 +1,72 @@
+client_id = "38254bd587274d5002c06d0ecab16259"
+name = "OneStop Analytics"
+application_url = "https://smj-shopify-frontend-876969185947.us-east5.run.app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/analytics"
+  topics = [
+    "inventory_items/create",
+    "inventory_items/delete",
+    "inventory_items/update",
+    "inventory_levels/connect",
+    "inventory_levels/disconnect",
+    "inventory_levels/update",
+    "locations/activate",
+    "locations/create",
+    "locations/deactivate",
+    "locations/delete",
+    "locations/update",
+    "orders/create",
+    "orders/delete",
+    "orders/updated",
+    "products/create",
+    "products/delete",
+    "products/update"
+  ]
+
+[access_scopes]
+scopes = "read_inventory,read_locations,read_orders,write_products,write_metaobjects,write_metaobject_definitions"
+
+[auth]
+redirect_urls = [
+  "https://smj-shopify-frontend-876969185947.us-east5.run.app/auth/callback"
+]
+
+[product.metafields.app.demo_info]
+type = "single_line_text_field"
+name = "Demo Source Info"
+description = "Tracks products created by the Shopify app template for development"
+
+  [product.metafields.app.demo_info.access]
+  admin = "merchant_read_write"
+
+[metaobjects.app.example]
+name = "Example"
+description = "An example metaobject definition created by the template"
+
+  [metaobjects.app.example.access]
+  admin = "merchant_read_write"
+
+[metaobjects.app.example.fields.title]
+name = "Title"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.example.fields.description]
+name = "Description"
+type = "multi_line_text_field"

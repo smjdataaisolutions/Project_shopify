@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.db.session import get_db
+from app.db.tenant_session import get_tenant_db
 from app.repositories.sales_repository import SalesFilters, SalesRepository
 from app.schemas.sales import (
     DailySalesBreakdownResponse,
@@ -15,6 +15,7 @@ from app.schemas.sales import (
     SalesActionNeededResponse,
     SalesFilterOptionsResponse,
     SalesSummary,
+    SalesChartResponse,
 )
 from app.services.sales_service import SalesService, build_sales_filters
 
@@ -45,7 +46,7 @@ def get_sales_filters(
 @router.get("/summary", response_model=SalesSummary)
 def get_sales_summary(
     filters: SalesFilters = Depends(get_sales_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> SalesSummary:
     """Return aggregate sales metrics with one PostgreSQL table scan."""
     try:
@@ -75,7 +76,7 @@ def get_daily_sales_breakdown(
     ] = Query(default="date"),
     sort_direction: Literal["asc", "desc"] = Query(default="desc"),
     filters: SalesFilters = Depends(get_sales_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> DailySalesBreakdownResponse:
     """Return filtered daily Sales KPI metrics with complete-result totals."""
     try:
@@ -91,7 +92,7 @@ def get_daily_sales_breakdown(
 
 @router.get("/filter-options", response_model=SalesFilterOptionsResponse)
 def get_sales_filter_options(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> SalesFilterOptionsResponse:
     """Return PostgreSQL-backed dimensions for the Sales filter panel."""
     try:
@@ -107,7 +108,7 @@ def get_sales_filter_options(
 def get_revenue_trend(
     interval: Literal["daily"] = Query(default="daily"),
     filters: SalesFilters = Depends(get_sales_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> RevenueTrendResponse:
     """Return order revenue grouped by processed date for chart rendering."""
     service = SalesService(SalesRepository(db))
@@ -120,10 +121,32 @@ def get_revenue_trend(
         ) from error
 
 
+@router.get("/chart", response_model=SalesChartResponse)
+def get_sales_chart(
+    dimension: str = Query(default="processed_date"),
+    measure: str = Query(default="revenue"),
+    comparison: str = Query(default="none"),
+    filters: SalesFilters = Depends(get_sales_filters),
+    db: Session = Depends(get_tenant_db),
+) -> SalesChartResponse:
+    """Return a validated dynamic Sales Explorer aggregation."""
+    try:
+        return SalesService(SalesRepository(db)).get_sales_chart(
+            filters, dimension, measure, comparison
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except SQLAlchemyError as error:
+        logger.exception("Unable to retrieve Sales Explorer data")
+        raise HTTPException(
+            status_code=500, detail="Unable to retrieve Sales Explorer data."
+        ) from error
+
+
 @router.get("/action-needed", response_model=SalesActionNeededResponse)
 def get_sales_action_needed(
     filters: SalesFilters = Depends(get_sales_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
     settings: Settings = Depends(get_settings),
 ) -> SalesActionNeededResponse:
     """Return deterministic sales recommendations for the selected period."""
@@ -148,7 +171,7 @@ def get_sales_action_needed(
 def download_sales_action_needed_records(
     action_id: str,
     filters: SalesFilters = Depends(get_sales_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
 ) -> Response:
     """Download the PostgreSQL records contributing to a supported action."""
     try:

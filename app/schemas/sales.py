@@ -48,6 +48,45 @@ class RevenueTrendResponse(BaseModel):
     highlights: RevenueTrendHighlights | None
 
 
+class SalesChartPoint(BaseModel):
+    id: str
+    label: str
+    value: float = Field(ge=0)
+
+
+class SalesChartPeriod(BaseModel):
+    start_date: date
+    end_date: date
+    days: int = Field(ge=1)
+
+
+class SalesChartSummary(BaseModel):
+    current_value: float = Field(ge=0)
+    comparison_value: float | None = Field(default=None, ge=0)
+    absolute_change: float | None = None
+    percentage_change: float | None = None
+    comparison_status: Literal[
+        "disabled", "available", "no_baseline", "no_data"
+    ]
+
+
+class SalesChartResponse(BaseModel):
+    dimension: Literal["processed_date", "sales_channel", "product"]
+    measure: Literal["revenue", "orders", "units_sold", "average_order_value"]
+    chart_type: Literal["line", "bar", "horizontal_bar"]
+    currency: str | None
+    comparison: Literal[
+        "none", "previous_period", "previous_7_days", "previous_30_days"
+    ]
+    current_period: SalesChartPeriod | None
+    comparison_period: SalesChartPeriod | None
+    summary: SalesChartSummary
+    has_current_data: bool
+    has_comparison_data: bool
+    data: list[SalesChartPoint]
+    comparison_data: list[SalesChartPoint]
+
+
 class SalesAction(BaseModel):
     id: str
     priority: Literal["critical", "warning", "recommendation"]

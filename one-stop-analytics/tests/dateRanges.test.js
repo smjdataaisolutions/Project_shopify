@@ -9,6 +9,7 @@ import {
 } from "../app/utils/dateRanges.js";
 
 const referenceDate = new Date(2026, 7, 11, 12);
+
 const expectedPresets = {
   today: ["2026-08-11", "2026-08-11"],
   yesterday: ["2026-08-10", "2026-08-10"],

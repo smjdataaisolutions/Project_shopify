@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+.shopify
+.react-router
+build
+node_modules
+tests
+prisma/dev.sqlite*
+npm-debug.log*

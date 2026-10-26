@@ -246,11 +246,11 @@ export default function StorePerformanceOverview() {
               <button
                 type="button"
                 className={styles.infoTooltip}
-                title="Uses today and the previous six calendar days in the storeâ€™s time zone."
-                aria-label="Uses today and the previous six calendar days in the storeâ€™s time zone."
+                title="Uses today and the previous six calendar days in the store’s time zone."
+                aria-label="Uses today and the previous six calendar days in the store’s time zone."
                 tabIndex="0"
               >
-                â“˜
+                ⓘ
               </button>
             </div>
             <LastSevenDaysPerformance

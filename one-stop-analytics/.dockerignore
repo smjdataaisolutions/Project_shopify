@@ -1,3 +1,11 @@
 .cache
 build
 node_modules
+.env
+.env.*
+.git
+.shopify
+.react-router
+tests
+prisma/dev.sqlite*
+npm-debug.log*

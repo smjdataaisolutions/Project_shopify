@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.db.session import get_db
+from app.db.tenant_session import get_tenant_db
 from app.repositories.inventory_repository import InventoryFilters, InventoryRepository
 from app.schemas.inventory import (
     InventoryFilterOptionsResponse,
@@ -48,7 +48,7 @@ def get_inventory_filters(
 
 @router.get("/filter-options", response_model=InventoryFilterOptionsResponse)
 def get_inventory_filter_options(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
     settings: Settings = Depends(get_settings),
 ) -> InventoryFilterOptionsResponse:
     """Return available filters and explicit unsupported-filter capabilities."""
@@ -69,7 +69,7 @@ def get_inventory_filter_options(
 def get_inventory_kpis(
     level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
     settings: Settings = Depends(get_settings),
 ) -> InventoryKpiResponse:
     """Return current inventory health and trailing-30-day velocity KPIs."""
@@ -93,7 +93,7 @@ def get_inventory_table(
     sort_order: Literal["asc", "desc"] = Query(default="asc"),
     level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
     settings: Settings = Depends(get_settings),
 ) -> InventoryTableResponse:
     """Return a paginated current inventory row per variant and location."""
@@ -115,7 +115,7 @@ def download_inventory_table(
     sort_order: Literal["asc", "desc"] = Query(default="asc"),
     level: Literal["product", "variant"] = "variant",
     filters: InventoryFilters = Depends(get_inventory_filters),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_tenant_db),
     settings: Settings = Depends(get_settings),
 ) -> Response:
     """Download all current Inventory details rows as CSV."""
