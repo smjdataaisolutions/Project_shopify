@@ -41,9 +41,9 @@ spec:
             - name: SHOPIFY_API_KEY
               value: "38254bd587274d5002c06d0ecab16259"
             - name: SHOPIFY_APP_URL
-              value: https://smj-shopify-frontend-876969185947.us-east5.run.app
+              value: https://app.smjdataai.com
             - name: SCOPES
-              value: read_inventory,read_locations,read_orders,write_products,write_metaobjects,write_metaobject_definitions
+              value: read_inventory,read_locations,read_orders,read_products
             - name: TENANT_ASSERTION_ISSUER
               value: smj-shopify-frontend
             - name: TENANT_ASSERTION_AUDIENCE

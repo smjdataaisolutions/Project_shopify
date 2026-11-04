@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import os
+import re
 from pathlib import Path
 
 import psycopg
@@ -10,12 +11,13 @@ import psycopg
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIR = ROOT / "migrations" / "analytics"
-VERSION = "001_multi_tenant"
+DEFAULT_VERSION = "001_multi_tenant"
 
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--direction", choices=("up", "down"), default="up")
+    parser.add_argument("--version", default=DEFAULT_VERSION)
     parser.add_argument("--database-url-env", default="MT_MIGRATION_DATABASE_URL")
     parser.add_argument("--expected-database", required=True)
     parser.add_argument("--backup-reference", required=True)
@@ -29,13 +31,17 @@ def arguments() -> argparse.Namespace:
 
 def main() -> None:
     args = arguments()
+    if not re.fullmatch(r"[0-9]{3}_[a-z0-9_]+", args.version):
+        raise SystemExit("Migration version must match NNN_lowercase_name.")
     raw_url = os.environ.get(args.database_url_env, "").strip()
     if not raw_url:
         raise SystemExit(f"{args.database_url_env} is required.")
     if len(args.backup_reference.strip()) < 8:
         raise SystemExit("A meaningful recoverable backup/branch reference is required.")
 
-    path = MIGRATION_DIR / f"{VERSION}.{args.direction}.sql"
+    path = MIGRATION_DIR / f"{args.version}.{args.direction}.sql"
+    if not path.is_file():
+        raise SystemExit(f"Migration file not found: {path.name}")
     sql = path.read_text(encoding="utf-8")
     checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
     database_url = raw_url.replace("postgresql+psycopg://", "postgresql://", 1)
@@ -47,7 +53,7 @@ def main() -> None:
                 f"Database mismatch: expected {args.expected_database!r}, "
                 f"connected to {actual_database!r}."
             )
-        print(f"migration={VERSION}")
+        print(f"migration={args.version}")
         print(f"direction={args.direction}")
         print(f"database={actual_database}")
         print(f"checksum={checksum}")
@@ -71,7 +77,7 @@ def main() -> None:
         )
         existing = connection.execute(
             "SELECT checksum FROM analytics_schema_migrations WHERE version = %s",
-            (VERSION,),
+            (args.version,),
         ).fetchone()
 
         if args.direction == "up":
@@ -84,7 +90,7 @@ def main() -> None:
             connection.execute(sql)
             connection.execute(
                 "INSERT INTO analytics_schema_migrations (version, checksum) VALUES (%s, %s)",
-                (VERSION, checksum),
+                (args.version, checksum),
             )
         else:
             if not existing:
@@ -92,7 +98,7 @@ def main() -> None:
             connection.execute(sql)
             connection.execute(
                 "DELETE FROM analytics_schema_migrations WHERE version = %s",
-                (VERSION,),
+                (args.version,),
             )
 
         connection.commit()

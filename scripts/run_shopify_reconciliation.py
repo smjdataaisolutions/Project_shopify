@@ -14,7 +14,7 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 
-REQUIRED_SCOPES = {"read_inventory", "read_locations", "read_orders", "write_products"}
+REQUIRED_SCOPES = {"read_inventory", "read_locations", "read_orders", "read_products"}
 TABLES = (
     "products",
     "product_variants",

@@ -25,6 +25,12 @@ const ALLOWED_TOPICS = new Set([
   "products/update",
 ]);
 
+const COMPLIANCE_TOPICS = new Set([
+  "customers/data_request",
+  "customers/redact",
+  "shop/redact",
+]);
+
 function requiredEnvironmentValue(environment, name) {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name} is required.`);
@@ -56,9 +62,11 @@ export function getWebhookProxyConfig(environment = process.env) {
   };
 }
 
-export async function forwardAnalyticsWebhook({
+async function forwardShopifyWebhook({
   request,
   authenticateWebhook,
+  allowedTopics,
+  backendPath,
   fetchImplementation = fetch,
   identityTokenProvider = getGoogleIdentityToken,
   tenantAssertionProvider = createTenantAssertion,
@@ -75,7 +83,7 @@ export async function forwardAnalyticsWebhook({
 
   const topic = request.headers.get("x-shopify-topic")?.toLowerCase() || "";
   const hmac = request.headers.get("x-shopify-hmac-sha256") || "";
-  if (!ALLOWED_TOPICS.has(topic) || !hmac) {
+  if (!allowedTopics.has(topic) || !hmac) {
     return new Response("Unsupported Shopify webhook.", { status: 400 });
   }
 
@@ -101,7 +109,7 @@ export async function forwardAnalyticsWebhook({
   let response;
   try {
     response = await fetchImplementation(
-      new URL("/internal/shopify-webhooks", config.backendOrigin),
+      new URL(backendPath, config.backendOrigin),
       {
         method: "POST",
         headers,
@@ -121,4 +129,20 @@ export async function forwardAnalyticsWebhook({
     return new Response("Webhook synchronization failed.", { status: 500 });
   }
   return new Response(null, { status: 204 });
+}
+
+export async function forwardAnalyticsWebhook(options) {
+  return forwardShopifyWebhook({
+    ...options,
+    allowedTopics: ALLOWED_TOPICS,
+    backendPath: "/internal/shopify-webhooks",
+  });
+}
+
+export async function forwardComplianceWebhook(options) {
+  return forwardShopifyWebhook({
+    ...options,
+    allowedTopics: COMPLIANCE_TOPICS,
+    backendPath: "/internal/shopify-compliance",
+  });
 }

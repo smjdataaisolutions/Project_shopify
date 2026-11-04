@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   forwardAnalyticsWebhook,
+  forwardComplianceWebhook,
   getWebhookProxyConfig,
 } from "../app/services/shopify-webhook-proxy.server.js";
 
@@ -112,4 +113,36 @@ test("returns a retryable failure when the private backend rejects the event", a
     config,
   });
   assert.equal(response.status, 500);
+});
+
+test("forwards only mandatory compliance topics to the fixed private endpoint", async () => {
+  let destination;
+  const response = await forwardComplianceWebhook({
+    request: webhookRequest("shop/redact", '{"shop_id":123}'),
+    authenticateWebhook: async () => ({ shop }),
+    identityTokenProvider: async () => "google-id-token",
+    tenantAssertionProvider: () => "tenant-assertion",
+    fetchImplementation: async (url) => {
+      destination = url;
+      return new Response(null, { status: 204 });
+    },
+    config,
+  });
+  assert.equal(response.status, 204);
+  assert.equal(
+    destination.href,
+    "https://private-api.example.run.app/internal/shopify-compliance",
+  );
+
+  const rejected = await forwardComplianceWebhook({
+    request: webhookRequest("orders/create"),
+    authenticateWebhook: async () => ({ shop }),
+    identityTokenProvider: async () => "unused",
+    tenantAssertionProvider: () => "unused",
+    fetchImplementation: async () => {
+      throw new Error("must not forward");
+    },
+    config,
+  });
+  assert.equal(rejected.status, 400);
 });
