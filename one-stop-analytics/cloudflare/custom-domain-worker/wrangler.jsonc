@@ -1,0 +1,16 @@
+{
+  "name": "smj-shopify-frontend-domain-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-04",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "app.smjdataai.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "PUBLIC_HOSTNAME": "app.smjdataai.com",
+    "CLOUD_RUN_ORIGIN": "https://smj-shopify-frontend-876969185947.us-east5.run.app"
+  }
+}

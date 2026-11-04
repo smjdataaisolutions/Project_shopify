@@ -177,9 +177,9 @@ repository, avoiding another repository resource.
 `shopify.app.staging.toml` contains:
 
 - Application URL:
-  `https://smj-shopify-frontend-876969185947.us-east5.run.app`
+  `https://app.smjdataai.com`
 - Redirect URL:
-  `https://smj-shopify-frontend-876969185947.us-east5.run.app/auth/callback`
+  `https://app.smjdataai.com/auth/callback`
 
 After the frontend URL responds and with separate approval, push this config:
 

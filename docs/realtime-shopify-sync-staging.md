@@ -48,7 +48,7 @@ key is exposed to the browser. The proxy cannot be directed to an arbitrary URL.
 The prepared Shopify TOML files request these scopes:
 
 ```text
-read_inventory,read_locations,read_orders,write_products,write_metaobjects,write_metaobject_definitions
+read_inventory,read_locations,read_orders,read_products
 ```
 
 They subscribe `/webhooks/analytics` to:

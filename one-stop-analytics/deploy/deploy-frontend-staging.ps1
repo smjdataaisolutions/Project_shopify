@@ -7,7 +7,7 @@ param(
     [string]$RuntimeServiceAccount = "smj-shopify-frontend-runner@smj-shopify-analytics.iam.gserviceaccount.com",
     [string]$BackendService = "smj-shopify-api",
     [string]$BackendUrl = "https://smj-shopify-api-3douxa5qja-ul.a.run.app",
-    [string]$FrontendUrl = "https://smj-shopify-frontend-876969185947.us-east5.run.app",
+    [string]$FrontendUrl = "https://app.smjdataai.com",
     [string]$ShopifyApiSecret = "smj-shopify-app-api-secret",
     [string]$ShopifyApiSecretVersion = "5",
     [string]$SessionDatabaseSecret = "smj-shopify-session-database-url",
@@ -34,7 +34,7 @@ $secretBindings = @(
 $environmentVariables = [ordered]@{
     SHOPIFY_API_KEY          = $ShopifyApiKey
     SHOPIFY_APP_URL          = $FrontendUrl
-    SCOPES                   = "read_inventory,read_locations,read_orders,write_products,write_metaobjects,write_metaobject_definitions"
+    SCOPES                   = "read_inventory,read_locations,read_orders,read_products"
     TENANT_ASSERTION_ISSUER  = "smj-shopify-frontend"
     TENANT_ASSERTION_AUDIENCE = "smj-shopify-api"
     FASTAPI_BASE_URL         = $BackendUrl

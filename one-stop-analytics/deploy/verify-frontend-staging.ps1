@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$FrontendUrl = "https://smj-shopify-frontend-876969185947.us-east5.run.app",
+    [string]$FrontendUrl = "https://app.smjdataai.com",
     [string]$BackendUrl = "https://smj-shopify-api-3douxa5qja-ul.a.run.app"
 )
 

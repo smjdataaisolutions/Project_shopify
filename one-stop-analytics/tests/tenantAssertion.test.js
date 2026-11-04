@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
