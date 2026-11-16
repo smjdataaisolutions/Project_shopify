@@ -16,13 +16,18 @@ RUN npm prune --omit=dev \
 RUN test ! -d /app/node_modules/prisma \
     && test ! -d /app/node_modules/@prisma/config \
     && test ! -d /app/node_modules/deepmerge-ts \
+    && test ! -d /app/node_modules/@react-router/dev \
+    && test ! -d /app/node_modules/@react-router/fs-routes \
+    && test ! -d /app/node_modules/minimatch \
     && node --input-type=module -e "await import('@prisma/client'); await import('@shopify/shopify-app-session-storage-prisma')"
 
 FROM node:22-alpine AS runtime
 
-RUN apk add --no-cache openssl \
+RUN apk add --no-cache openssl 'zlib>=1.4-r0' \
     && addgroup -S app \
-    && adduser -S app -G app
+    && adduser -S app -G app \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -34,4 +39,4 @@ COPY --from=builder --chown=app:app /app/build ./build
 
 USER app
 EXPOSE 8080
-CMD ["npm", "run", "start"]
+CMD ["node", "./node_modules/@react-router/serve/bin.js", "./build/server/index.js"]

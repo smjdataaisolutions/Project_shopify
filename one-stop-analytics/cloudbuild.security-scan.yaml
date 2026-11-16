@@ -1,0 +1,41 @@
+steps:
+  - name: aquasec/trivy:0.76.2
+    entrypoint: trivy
+    args:
+      - image
+      - --scanners
+      - vuln
+      - --severity
+      - CRITICAL,HIGH
+      - --exit-code
+      - "1"
+      - --format
+      - table
+      - us-east5-docker.pkg.dev/smj-shopify-analytics/smj-shopify-api/smj-shopify-frontend@sha256:f50e52c6ab4c2cbc73fcaff72ac70c86535adbf1ccad9040527f1b8d39d6cf7c
+  - name: aquasec/trivy:0.76.2
+    entrypoint: trivy
+    args:
+      - image
+      - --scanners
+      - vuln
+      - --severity
+      - MEDIUM
+      - --format
+      - table
+      - us-east5-docker.pkg.dev/smj-shopify-analytics/smj-shopify-api/smj-shopify-frontend@sha256:f50e52c6ab4c2cbc73fcaff72ac70c86535adbf1ccad9040527f1b8d39d6cf7c
+  - name: aquasec/trivy:0.76.2
+    entrypoint: trivy
+    args:
+      - image
+      - --scanners
+      - vuln
+      - --format
+      - cyclonedx
+      - --output
+      - /workspace/sbom.cdx.json
+      - us-east5-docker.pkg.dev/smj-shopify-analytics/smj-shopify-api/smj-shopify-frontend@sha256:f50e52c6ab4c2cbc73fcaff72ac70c86535adbf1ccad9040527f1b8d39d6cf7c
+  - name: alpine:3.22
+    entrypoint: sh
+    args:
+      - -c
+      - test -s /workspace/sbom.cdx.json && sha256sum /workspace/sbom.cdx.json && wc -c /workspace/sbom.cdx.json
