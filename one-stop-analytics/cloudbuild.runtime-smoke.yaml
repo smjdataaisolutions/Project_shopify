@@ -1,0 +1,25 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        image='us-east5-docker.pkg.dev/smj-shopify-analytics/smj-shopify-api/smj-shopify-frontend@sha256:f50e52c6ab4c2cbc73fcaff72ac70c86535adbf1ccad9040527f1b8d39d6cf7c'
+        docker run --rm --entrypoint node "$image" --input-type=module -e "const fs = await import('node:fs'); const bundle = fs.readFileSync('/app/build/server/index.js', 'utf8'); const required = ['Install OneStop Analytics from Shopify', 'Shopify-owned surface']; const forbidden = ['example.myshopify.com', 'Shop domain']; if (required.some((value) => !bundle.includes(value)) || forbidden.some((value) => bundle.includes(value))) process.exit(1); console.log('auth_bundle=corrected');"
+        docker run --detach --name onestop-release-smoke \
+          --env SHOPIFY_API_KEY=test-api-key \
+          --env SHOPIFY_API_SECRET=test-api-secret \
+          --env SHOPIFY_APP_URL=https://example.test \
+          --env SCOPES=read_products \
+          --env DATABASE_URL=postgresql://test:test@127.0.0.1:5432/test \
+          "$image"
+        for attempt in $(seq 1 20); do
+          if docker exec onestop-release-smoke node --input-type=module -e "const response = await fetch('http://127.0.0.1:8080/', {redirect: 'manual'}); if (response.status !== 302) process.exit(1); console.log('runtime_status=' + response.status + ' location=' + response.headers.get('location'));"; then
+            docker rm --force onestop-release-smoke
+            exit 0
+          fi
+          sleep 1
+        done
+        docker logs onestop-release-smoke
+        docker rm --force onestop-release-smoke
+        exit 1
